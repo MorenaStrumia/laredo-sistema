@@ -398,20 +398,14 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:8px 16px;d
 <!-- MODAL POSNET -->
 <div class="modal-overlay" id="modal-posnet">
   <div class="modal">
-    <div class="modal-title">Posnet</div><div class="modal-sub">Presentá el monto al cliente</div>
+    <div class="modal-title">Posnet — Point Smart</div><div class="modal-sub">Enviando cobro al dispositivo...</div>
     <div class="posnet-monto-grande" id="posnet-monto"></div>
-    <div class="posnet-hook">
-      <strong>🔌 Integración con posnet — lista para conectar</strong>
-      Cuando tengás el driver instalado, el cobro se va a iniciar automáticamente en el posnet con este monto.
-    </div>
-    <div class="posnet-instrucciones">
-      <div class="posnet-paso"><div class="posnet-num">1</div><span>Ingresá el monto en el posnet</span></div>
-      <div class="posnet-paso"><div class="posnet-num">2</div><span>El cliente pasa la tarjeta o acerca el celular</span></div>
-      <div class="posnet-paso"><div class="posnet-num">3</div><span>Esperá la aprobación</span></div>
-      <div class="posnet-paso"><div class="posnet-num">4</div><span>Confirmá acá</span></div>
-    </div>
+    <div id="posnet-estado" style="text-align:center;font-size:13px;color:#888;padding:10px;background:#111;border-radius:8px;margin-bottom:12px">⏳ Conectando con el posnet...</div>
     <div class="modal-items-preview" id="posnet-items"></div>
-    <div class="modal-btns"><button class="btn-cancelar" onclick="cerrarModal('modal-posnet')">Cancelar</button><button class="btn-confirmar" style="background:var(--morado)" onclick="confirmarVenta()">✓ Aprobado</button></div>
+    <div class="modal-btns">
+      <button class="btn-cancelar" onclick="cancelarPoint()">✕ Cancelar</button>
+      <button class="btn-confirmar" style="background:var(--morado)" id="btn-confirmar-posnet" onclick="confirmarVenta()" disabled>Esperando...</button>
+    </div>
   </div>
 </div>
 
@@ -816,10 +810,66 @@ function abrirCobro() {
   } else {
     document.getElementById('posnet-monto').textContent='$'+t.toLocaleString('es-AR');
     document.getElementById('posnet-items').innerHTML=itemsHTML();
+    document.getElementById('posnet-estado').textContent='⏳ Enviando al posnet...';
+    document.getElementById('posnet-estado').style.color='#888';
+    document.getElementById('btn-confirmar-posnet').disabled=true;
+    document.getElementById('btn-confirmar-posnet').textContent='Esperando...';
     abrirModal('modal-posnet');
-    // HOOK POSNET: cuando llegue el driver, descomentar:
-    // posnetSDK.iniciarCobro({ monto: t, onAprobado: confirmarVenta, onRechazado: ()=>toast('Rechazado','rojo') });
+    iniciarCobroPointSmart(t);
   }
+}
+
+let pointPaymentIntentId = null;
+let pointPollingInterval = null;
+
+async function iniciarCobroPointSmart(monto) {
+  const montoEnCentavos = Math.round(monto * 100);
+  const desc = carrito.map(i=>i.nombre+' x'+i.qty).join(', ').substring(0,50);
+  try {
+    const r = await llamarSheets('iniciar_cobro_point', { monto: montoEnCentavos, descripcion: desc });
+    if (r.id) {
+      pointPaymentIntentId = r.id;
+      document.getElementById('posnet-estado').textContent = '✅ Enviado — el cliente puede pagar';
+      document.getElementById('posnet-estado').style.color = '#27AE60';
+      // Polling cada 3 segundos para detectar aprobación automática
+      pointPollingInterval = setInterval(() => consultarPoint(monto), 3000);
+    } else {
+      document.getElementById('posnet-estado').textContent = '❌ ' + (r.message || 'Error al enviar');
+      document.getElementById('posnet-estado').style.color = '#E74C3C';
+      document.getElementById('btn-confirmar-posnet').disabled = false;
+      document.getElementById('btn-confirmar-posnet').textContent = '✓ Confirmar manual';
+    }
+  } catch(e) {
+    document.getElementById('posnet-estado').textContent = '⚠ Sin conexión — confirmá manual';
+    document.getElementById('posnet-estado').style.color = '#F1C40F';
+    document.getElementById('btn-confirmar-posnet').disabled = false;
+    document.getElementById('btn-confirmar-posnet').textContent = '✓ Confirmar manual';
+  }
+}
+
+async function consultarPoint(monto) {
+  if (!pointPaymentIntentId) return;
+  try {
+    const r = await llamarSheets('consultar_cobro_point', { payment_intent_id: pointPaymentIntentId });
+    const estado = r.state || (r.payment && r.payment.state);
+    if (estado === 'FINISHED' || estado === 'approved') {
+      clearInterval(pointPollingInterval); pointPaymentIntentId = null;
+      document.getElementById('posnet-estado').textContent = '✅ ¡Pago aprobado!';
+      setTimeout(() => { cerrarModal('modal-posnet'); confirmarVenta(); }, 800);
+    } else if (estado === 'CANCELED' || estado === 'ERROR') {
+      clearInterval(pointPollingInterval); pointPaymentIntentId = null;
+      document.getElementById('posnet-estado').textContent = '❌ Cancelado — intentá de nuevo';
+      document.getElementById('posnet-estado').style.color = '#E74C3C';
+      document.getElementById('btn-confirmar-posnet').disabled = false;
+      document.getElementById('btn-confirmar-posnet').textContent = '✓ Confirmar manual';
+    }
+  } catch(e) {}
+}
+
+async function cancelarPoint() {
+  clearInterval(pointPollingInterval); pointPaymentIntentId = null;
+  if (SCRIPT_URL) llamarSheets('cancelar_cobro_point').catch(()=>{});
+  cerrarModal('modal-posnet');
 }
 function calcularVuelto() { const t=calcularTotal(),r=parseFloat(document.getElementById('ef-recibido').value)||0,v=r-t; document.getElementById('ef-vuelto').textContent=v>=0?'$'+v.toLocaleString('es-AR'):'$ —'; }
 function cargarQR(input) { const f=input.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{APP.qr=e.target.result;localStorage.setItem('laredo_qr',APP.qr);actualizarQRConfig();}; r.readAsDataURL(f); }
