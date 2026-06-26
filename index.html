@@ -270,7 +270,7 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:8px 16px;d
 /* PRECIO EDITABLE INLINE */
 .precio-edit-input{background:#111;border:1px solid var(--naranja);border-radius:4px;color:var(--naranja);font-size:12px;font-weight:700;font-family:'Inter',sans-serif;width:80px;padding:2px 5px;outline:none}
 #ticket-print{display:none}
-@media print{@page{size:58mm auto;margin:0}body>*:not(#ticket-print){display:none!important}#ticket-print{display:block!important;width:58mm;font-family:'Courier New',monospace;font-size:8.5pt;color:#000;background:#fff;padding:3mm 4mm;line-height:1.45;}}
+@media print{@page{size:58mm auto;margin:0mm}body>*:not(#ticket-print){display:none!important}#ticket-print{display:block!important;width:48mm;font-family:'Courier New',monospace;font-size:11pt;font-weight:bold;color:#000;background:#fff;padding:0;margin:0;line-height:1.5;}#ticket-print pre{font-size:11pt;font-weight:bold;}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
 </style>
 </head>
@@ -912,13 +912,51 @@ async function confirmarVenta() {
 let imprimirActivo = localStorage.getItem('laredo_imprimir') !== 'false'; // default: true
 
 function imprimirTicketDirecto(v) {
-  const W=32,sep='='.repeat(W),sepL='-'.repeat(W);
-  const cn=t=>{const s=Math.max(0,Math.floor((W-t.length)/2));return ' '.repeat(s)+t;};
-  const f=(n,p)=>{const mN=W-p.length-1;const nn=n.length>mN?n.substring(0,mN-1)+'.':n;return nn+' '.repeat(Math.max(1,W-nn.length-p.length))+p;};
-  const mt={efectivo:'Efectivo',qr:'QR / MP',posnet:'Posnet'};
-  const lineas=[sep,cn('LA REDO SOCIAL CLUB'),cn('Bar & Parrilla'),cn('Rafaela, Santa Fe'),sep,`Ticket N: ${String(v.id).padStart(6,'0')}`,`Fecha:  ${v.fecha}`,`Hora:   ${v.hora}`,sepL,...v.items.map(i=>`${i.qty}x ${i.nombre}\n${f('','$'+i.subtotal.toLocaleString('es-AR'))}`),sepL,f('TOTAL','$'+v.total.toLocaleString('es-AR')),sep,`Pago: ${mt[v.metodo]}`,sep,cn('¡Gracias por venir!'),sep,''].join('\n');
-  document.getElementById('ticket-print').innerHTML=`<pre style="font-family:'Courier New',monospace;font-size:8.5pt;white-space:pre;margin:0;padding:0;color:#000;background:#fff">${lineas}</pre>`;
-  if (imprimirActivo) window.print(); // imprime directo, sin dialog del navegador para la impresora térmica
+  const W = 30; // ancho real POS-58C en caracteres con font 11pt
+  const sep  = '='.repeat(W);
+  const sepL = '-'.repeat(W);
+  const cn = t => {
+    const s = Math.max(0, Math.floor((W - t.length) / 2));
+    return ' '.repeat(s) + t;
+  };
+  const fila = (nombre, precio) => {
+    const maxN = W - precio.length - 1;
+    const n = nombre.length > maxN ? nombre.substring(0, maxN - 1) + '.' : nombre;
+    const espacios = ' '.repeat(Math.max(1, W - n.length - precio.length));
+    return n + espacios + precio;
+  };
+  const mt = {efectivo:'Efectivo', qr:'QR / Mercado Pago', posnet:'Posnet'};
+
+  const lineas = [
+    sep,
+    cn('LA REDO SOCIAL CLUB'),
+    cn('Bar & Parrilla'),
+    cn('Rafaela, Santa Fe'),
+    sep,
+    `N: ${String(v.id).padStart(6,'0')}   ${v.fecha}`,
+    `Hora: ${v.hora}`,
+    sepL,
+    ...v.items.map(i => {
+      const precio = '$' + i.subtotal.toLocaleString('es-AR');
+      const nombre = `${i.qty}x ${i.nombre}`;
+      return fila(nombre, precio);
+    }),
+    sepL,
+    fila('TOTAL', '$' + v.total.toLocaleString('es-AR')),
+    sep,
+    `Pago: ${mt[v.metodo]}`,
+    sep,
+    cn('!Gracias por venir!'),
+    cn('La Redo Social Club'),
+    cn('@laredosocialclub'),
+    sep,
+    ''
+  ].join('\n');
+
+  document.getElementById('ticket-print').innerHTML =
+    `<pre style="font-family:'Courier New',monospace;font-size:11pt;font-weight:bold;white-space:pre;margin:0;padding:0;color:#000;background:#fff;width:48mm">${lineas}</pre>`;
+
+  if (imprimirActivo) window.print();
 }
 
 // ============================================================
