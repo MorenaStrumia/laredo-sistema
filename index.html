@@ -270,7 +270,7 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:8px 16px;d
 /* PRECIO EDITABLE INLINE */
 .precio-edit-input{background:#111;border:1px solid var(--naranja);border-radius:4px;color:var(--naranja);font-size:12px;font-weight:700;font-family:'Inter',sans-serif;width:80px;padding:2px 5px;outline:none}
 #ticket-print{display:none}
-@media print{@page{size:58mm auto;margin:0mm}body>*:not(#ticket-print){display:none!important}#ticket-print{display:block!important;width:48mm;font-family:'Courier New',monospace;font-size:11pt;font-weight:bold;color:#000;background:#fff;padding:0;margin:0;line-height:1.5;}#ticket-print pre{font-size:11pt;font-weight:bold;}}
+@media print{@page{size:58mm auto;margin:0mm}body>*:not(#ticket-print){display:none!important}#ticket-print{display:block!important;width:54mm;font-family:'Courier New',monospace;font-size:11pt;font-weight:bold;color:#000;background:#fff;padding:0;margin:0;line-height:1.5;}#ticket-print pre{font-size:11pt;font-weight:bold;}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
 </style>
 </head>
@@ -660,7 +660,7 @@ function guardarMovimiento() {
   const concepto = document.getElementById('mov-concepto').value.trim();
   const monto = parseFloat(document.getElementById('mov-monto').value);
   if (!concepto || !monto) { toast('Completá concepto y monto', 'rojo'); return; }
-  const mov = { id: Date.now(), tipo: tipoMovActual, concepto, monto, fecha: new Date().toLocaleDateString('es-AR'), hora: new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}), usuario: usuarioActual?.nombre || '—' };
+  const mov = { id: Date.now(), tipo: tipoMovActual, concepto, monto, fecha: new Date().toLocaleDateString('es-AR'), hora: new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}), usuario: usuarioActual?.nombre || '—' };
   APP.movimientos.push(mov);
   guardarLocal();
   actualizarMovCount();
@@ -884,7 +884,7 @@ async function confirmarVenta() {
   // Snapshot exacto: nombre + precio del momento (aunque el precio cambie después, esto queda así)
   const venta = {
     id: nextVentaId(),
-    hora: new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
+    hora: new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}),
     fecha: new Date().toLocaleDateString('es-AR'),
     items: carrito.map(i => ({ nombre: i.nombre, qty: i.qty, precio: i.precio, subtotal: i.precio*i.qty })),
     total, metodo: metodoPago
@@ -912,7 +912,7 @@ async function confirmarVenta() {
 let imprimirActivo = localStorage.getItem('laredo_imprimir') !== 'false'; // default: true
 
 function imprimirTicketDirecto(v) {
-  const W = 30; // ancho real POS-58C en caracteres con font 11pt
+  const W = 32; // ancho real POS-58C en caracteres con font 11pt
   const sep  = '='.repeat(W);
   const sepL = '-'.repeat(W);
   const cn = t => {
@@ -934,7 +934,7 @@ function imprimirTicketDirecto(v) {
     cn('Rafaela, Santa Fe'),
     sep,
     `N: ${String(v.id).padStart(6,'0')}   ${v.fecha}`,
-    `Hora: ${v.hora}`,
+    `Hora: ${v.hora.replace(" ", "").replace(".", "").replace("am","am").replace("pm","pm")}`,
     sepL,
     ...v.items.map(i => {
       const precio = '$' + i.subtotal.toLocaleString('es-AR');
@@ -954,7 +954,7 @@ function imprimirTicketDirecto(v) {
   ].join('\n');
 
   document.getElementById('ticket-print').innerHTML =
-    `<pre style="font-family:'Courier New',monospace;font-size:11pt;font-weight:bold;white-space:pre;margin:0;padding:0;color:#000;background:#fff;width:48mm">${lineas}</pre>`;
+    `<pre style="font-family:'Courier New',monospace;font-size:11pt;font-weight:bold;white-space:pre;margin:0;padding:0;color:#000;background:#fff;width:54mm">${lineas}</pre>`;
 
   if (imprimirActivo) window.print();
 }
