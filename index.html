@@ -964,60 +964,14 @@ function imprimirTicketDirecto(v) {
 }
 
 function imprimirBluetooth(v) {
-  // ESC/POS commands — bypasean la config de fuente de RawBT
-  const ESC = '\x1B', GS = '\x1D';
-  const init = ESC + '@';                    // Inicializar impresora
-  const fontSmall = ESC + 'M\x01';          // Font B (pequeña)
-  const center = ESC + 'a\x01';             // Centrado
-  const left = ESC + 'a\x00';              // Izquierda
-  const bold_on = ESC + 'E\x01';           // Negrita ON
-  const bold_off = ESC + 'E\x00';          // Negrita OFF
-  const cut = GS + 'V\x41\x03';            // Corte parcial
-  const nl = '\n';
-
-  const W = 32;
-  const sep = '='.repeat(W);
-  const sepL = '-'.repeat(W);
-  const cn = t => { const s = Math.max(0, Math.floor((W - t.length) / 2)); return ' '.repeat(s) + t; };
-  const fila = (n, p) => { const mN = W - p.length - 1; const nn = n.length > mN ? n.substring(0, mN - 1) + '.' : n; return nn + ' '.repeat(Math.max(1, W - nn.length - p.length)) + p; };
-  const mt = {efectivo:'Efectivo', qr:'QR / MP', posnet:'Posnet'};
-
-  const ticket = [
-    init, fontSmall,
-    center, bold_on, 'LA REDO SOCIAL CLUB', nl, bold_off,
-    'Bar & Parrilla', nl,
-    'Rafaela, Santa Fe', nl,
-    left, sep, nl,
-    `N:${String(v.id).padStart(5,'0')}  C${v.caja||1}  ${v.fecha}`, nl,
-    `Hora: ${v.hora}`, nl,
-    sepL, nl,
-    ...v.items.map(i => fila(`${i.qty}x ${i.nombre}`, '$' + i.subtotal.toLocaleString('es-AR')) + nl),
-    sepL, nl,
-    bold_on, fila('TOTAL', '$' + v.total.toLocaleString('es-AR')), nl, bold_off,
-    sep, nl,
-    `Pago: ${mt[v.metodo]}`, nl,
-    sep, nl,
-    center, '!Gracias por venir!', nl,
-    '@laredosocialclub', nl,
-    sep, nl,
-    '\n\n\n',
-    cut
-  ].join('');
-
-  // Codificar en base64 para RawBT
-  const bytes = [];
-  for (let i = 0; i < ticket.length; i++) bytes.push(ticket.charCodeAt(i) & 0xFF);
-  const b64 = btoa(String.fromCharCode(...bytes));
-
-  // Intent RawBT con datos ESC/POS en base64
-  const intent = `rawbt://base64?data=${encodeURIComponent(b64)}&printer=PRINTER001`;
-  
-  // Intentar abrir RawBT
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  iframe.src = intent;
-  document.body.appendChild(iframe);
-  setTimeout(() => document.body.removeChild(iframe), 2000);
+  const texto = generarTextoTicket(v);
+  const intent = `rawbt://print?text=${encodeURIComponent(texto)}&printer=PRINTER001&charset=UTF-8&paperWidth=58`;
+  const a = document.createElement('a');
+  a.href = intent;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 1000);
 }
 
 // ============================================================
