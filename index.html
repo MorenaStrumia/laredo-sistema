@@ -293,6 +293,41 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:6px 12px;d
 #ticket-print{display:none}
 @media print{@page{size:58mm auto;margin:5mm}body>*:not(#ticket-print){display:none!important}#ticket-print{display:block!important;width:48mm;box-sizing:border-box;font-family:'Courier New',monospace;font-size:10pt;font-weight:bold;color:#000;background:#fff;padding:0;margin:0;line-height:1.5;}#ticket-print pre{font-size:10pt;font-weight:bold;white-space:pre-wrap;word-break:break-all;width:100%;margin:0;padding:0;}}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+
+/* STOCK */
+.stock-layout{display:grid;grid-template-columns:220px 1fr;flex:1;overflow:hidden;min-height:0}
+@media(max-width:700px){.stock-layout{grid-template-columns:1fr}}
+.stock-sidebar{background:#111;border-right:1px solid #222;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch}
+.stock-sidebar h3{font-size:10px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px}
+.prov-btn{padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid #222;background:none;color:#888;font-family:'Inter',sans-serif;font-size:12px;text-align:left;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.prov-btn:hover,.prov-btn:active{border-color:#444;color:#EEE}
+.prov-btn.active{border-color:var(--naranja);color:var(--naranja);background:rgba(227,107,26,.08)}
+.stock-main{overflow-y:auto;padding:14px;background:#1A1A1A;-webkit-overflow-scrolling:touch;flex:1}
+.stock-mode-tabs{display:flex;gap:0;background:#111;border-radius:8px;padding:3px;margin-bottom:14px}
+.stock-mode-tab{flex:1;padding:7px;border:none;background:none;color:#555;cursor:pointer;font-family:'Inter',sans-serif;font-size:12px;font-weight:500;border-radius:5px;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.stock-mode-tab.active{background:#2A2A2A;color:#FFF}
+.stock-table{width:100%;border-collapse:collapse;margin-bottom:14px}
+.stock-table th{font-size:10px;color:#444;text-transform:uppercase;letter-spacing:1px;padding:7px 8px;text-align:left;border-bottom:1px solid #222;white-space:nowrap}
+.stock-table td{padding:7px 8px;font-size:12px;color:#CCC;border-bottom:1px solid #1A1A1A;vertical-align:middle}
+.stock-table tr:hover td{background:rgba(255,255,255,.02)}
+.stock-num{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.stock-initial{color:var(--celeste)}
+.stock-final{color:var(--verde)}
+.stock-diff.ok{color:var(--verde)}.stock-diff.warn{color:var(--amarillo)}.stock-diff.neg{color:var(--rojo)}
+.stock-cost{color:#888;font-size:11px}
+.stock-input-cell{padding:3px 8px}
+.stock-cell-input{width:64px;padding:4px 6px;background:#111;border:1px solid #333;border-radius:5px;color:#FFF;font-family:'Inter',sans-serif;font-size:12px;text-align:right;outline:none}
+.stock-cell-input:focus{border-color:var(--naranja)}
+.stock-prov-badge{font-size:9px;padding:2px 6px;border-radius:4px;background:#2A2A2A;color:#666;display:inline-block}
+.hist-stock-card{background:#111;border-radius:10px;padding:12px;border:1px solid #222;margin-bottom:10px;cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.hist-stock-card:hover{border-color:#444}
+.hist-stock-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.stock-status-bar{background:#111;border:1px solid #222;border-radius:8px;padding:8px 12px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:11px;color:#666}
+.stock-status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.stock-status-dot.ok{background:var(--verde)}.stock-status-dot.warn{background:var(--amarillo)}.stock-status-dot.none{background:#333}
+.btn-stock-guardar{padding:8px 18px;border-radius:7px;border:none;background:var(--verde);color:white;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.btn-stock-guardar:active{opacity:.8}
+.stock-section-title{font-size:11px;font-weight:700;color:#EEE;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
 </style>
 </head>
 <body>
@@ -345,6 +380,7 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:6px 12px;d
     <button class="nav-tab active" onclick="cambiarModulo('ventas')" id="tab-ventas">🧾 Ventas</button>
     <button class="nav-tab" onclick="cambiarModulo('contable')" id="tab-contable">📒 Contable</button>
     <button class="nav-tab" onclick="cambiarModulo('historial')" id="tab-historial">📈 Historial</button>
+    <button class="nav-tab" onclick="cambiarModulo('stock')" id="tab-stock">📦 Stock</button>
     <div class="nav-right">
       <button class="btn-header naranja" onclick="abrirResumen()">📊 Resumen</button>
     </div>
@@ -393,6 +429,35 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:6px 12px;d
           <div class="grafico-leyenda"><div class="leyenda-item"><div class="leyenda-dot" style="background:var(--naranja)"></div>Ingresos</div><div class="leyenda-item"><div class="leyenda-dot" style="background:#E74C3C77"></div>Egresos</div></div>
         </div>
         <div class="hist-cards" id="hist-cards"></div>
+      </div>
+    </div>
+    <!-- STOCK -->
+    <div class="tab-screen" id="screen-stock">
+      <div class="stock-layout">
+        <div class="stock-sidebar">
+          <div style="padding:4px 0 6px">
+            <div style="font-size:13px;font-weight:700;color:#EEE;margin-bottom:6px">📦 Stock</div>
+          </div>
+          <h3>Proveedor</h3>
+          <button class="prov-btn active" id="prov-btn-todos" onclick="filtrarProveedor('TODOS')">🏪 Todos</button>
+          <button class="prov-btn" id="prov-btn-GARU" onclick="filtrarProveedor('GARU')">🟠 GARU</button>
+          <button class="prov-btn" id="prov-btn-CASSINA" onclick="filtrarProveedor('CASSINA')">🔵 CASSINA</button>
+          <button class="prov-btn" id="prov-btn-ROCA" onclick="filtrarProveedor('ROCA')">🔴 ROCA</button>
+          <button class="prov-btn" id="prov-btn-AGUA_SC" onclick="filtrarProveedor('AGUA_SC')">💧 AGUA SC</button>
+          <button class="prov-btn" id="prov-btn-VELOCE" onclick="filtrarProveedor('VELOCE')">🟡 VELOCE</button>
+          <button class="prov-btn" id="prov-btn-PROLIDE" onclick="filtrarProveedor('PROLIDE')">🟢 PROLIDE</button>
+          <button class="prov-btn" id="prov-btn-GANCIA" onclick="filtrarProveedor('GANCIA')">🍊 GANCIA</button>
+          <button class="prov-btn" id="prov-btn-VARIOS" onclick="filtrarProveedor('VARIOS')">📦 VARIOS</button>
+          <div style="margin-top:10px;border-top:1px solid #222;padding-top:10px">
+            <button class="btn-nueva-jornada" onclick="abrirModalNuevoItemStock()">+ Agregar ítem</button>
+          </div>
+        </div>
+        <div class="stock-main" id="stock-main">
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#333;font-size:13px;flex-direction:column;gap:8px">
+            <div style="font-size:32px">📦</div>
+            Cargando stock...
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -540,6 +605,71 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:6px 12px;d
   </div>
 </div>
 
+<!-- MODAL NUEVO ÍTEM STOCK -->
+<div class="modal-overlay" id="modal-nuevo-item-stock">
+  <div class="modal modal-wide">
+    <div class="resumen-header"><span class="modal-title">📦 Nuevo ítem de stock</span><button class="btn-cerrar" onclick="cerrarModal('modal-nuevo-item-stock')">✕</button></div>
+    <div class="modal-sub">Agregá un producto al inventario.</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="ns-nombre" placeholder="Ej: Brahma 1L"></div>
+      <div class="form-group"><label class="form-label">Unidad</label><input type="text" class="form-input" id="ns-unidad" placeholder="Ej: litros, unidades, kg"></div>
+    </div>
+    <div class="form-row form-row-3">
+      <div class="form-group"><label class="form-label">Proveedor *</label>
+        <select class="form-select" id="ns-proveedor">
+          <option value="GARU">GARU</option>
+          <option value="CASSINA">CASSINA</option>
+          <option value="ROCA">ROCA</option>
+          <option value="AGUA_SC">AGUA SAN CARLOS</option>
+          <option value="VELOCE">VELOCE</option>
+          <option value="PROLIDE">PROLIDE</option>
+          <option value="GANCIA">GANCIA</option>
+          <option value="VARIOS">VARIOS</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Categoría</label>
+        <select class="form-select" id="ns-categoria">
+          <option value="Bebidas">Bebidas</option>
+          <option value="Comidas">Comidas</option>
+          <option value="Insumos">Insumos</option>
+          <option value="Limpieza">Limpieza</option>
+          <option value="Otros">Otros</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Stock mínimo</label><input type="number" class="form-input" id="ns-minimo" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancelar" onclick="cerrarModal('modal-nuevo-item-stock')">Cancelar</button>
+      <button class="btn-confirmar" onclick="guardarNuevoItemStock()">✓ Agregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PEDIDO SEMANAL -->
+<div class="modal-overlay" id="modal-pedido-stock">
+  <div class="modal modal-wide">
+    <div class="resumen-header"><span class="modal-title">🛒 Cargar pedido</span><button class="btn-cerrar" onclick="cerrarModal('modal-pedido-stock')">✕</button></div>
+    <div class="modal-sub" id="pedido-stock-sub">Registrá lo que pediste esta semana.</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cantidad pedida *</label><input type="number" class="form-input" id="pedido-qty" placeholder="0" inputmode="decimal" min="0" step="0.5"></div>
+      <div class="form-group"><label class="form-label">Costo por unidad ($)</label><input type="number" class="form-input" id="pedido-costo" placeholder="0" inputmode="numeric" min="0"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px"><label class="form-label">Nota (opcional)</label><input type="text" class="form-input" id="pedido-nota" placeholder="Ej: llegó el miércoles"></div>
+    <div class="modal-btns">
+      <button class="btn-cancelar" onclick="cerrarModal('modal-pedido-stock')">Cancelar</button>
+      <button class="btn-confirmar" onclick="guardarPedidoStock()">✓ Guardar pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTORIAL STOCK JORNADA -->
+<div class="modal-overlay" id="modal-hist-stock">
+  <div class="modal modal-wide" style="max-width:640px">
+    <div class="resumen-header"><span class="modal-title">📊 Stock histórico</span><button class="btn-cerrar" onclick="cerrarModal('modal-hist-stock')">✕</button></div>
+    <div id="hist-stock-contenido" style="max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 <div class="toast oculto" id="toast"></div>
 <div id="ticket-print"></div>
 
@@ -565,6 +695,8 @@ const COL_JORNADAS    = 'laredo_jornadas';
 const COL_VENTAS      = 'laredo_ventas';
 const COL_MOVIMIENTOS = 'laredo_movimientos';
 const COL_PRODUCTOS   = 'laredo_productos';
+const COL_STOCK_ITEMS = 'laredo_stock_items';
+const COL_STOCK_MOVS  = 'laredo_stock_movimientos';
 
 // ============================================================
 // GOOGLE SHEETS (backup)
@@ -694,12 +826,13 @@ function logout() {
 // NAVEGACIÓN
 // ============================================================
 function cambiarModulo(mod) {
-  ['ventas','contable','historial'].forEach(m => {
+  ['ventas','contable','historial','stock'].forEach(m => {
     document.getElementById('screen-'+m).classList.toggle('active', m===mod);
     const t = document.getElementById('tab-'+m); if(t) t.classList.toggle('active', m===mod);
   });
   if (mod === 'historial') renderHistorial();
   if (mod === 'contable') renderListaJornadas();
+  if (mod === 'stock') renderStockModule();
 }
 function setSyncPill(e, t) { const el = document.getElementById('sync-pill'); if(el){ el.className='sync-pill '+e; el.textContent=t; } }
 
@@ -1252,6 +1385,494 @@ async function exportarHistorialCSV(){
   let csv='Fecha;Descripcion;Estado;Ventas POS;Total Ingresos;Gastos Fijos;Mercaderia;Staff;Total Egresos;Resultado;Margen %\n';
   snap.docs.forEach(d=>{const j=d.data();const m=j.totalIngresos>0?((j.resultado/j.totalIngresos)*100).toFixed(1):0;csv+=`"${j.fechaDisplay}";"${j.descripcion||''}";"${j.estado}";${j.ventasPOS||0};${j.totalIngresos||0};${j.totalFijos||0};${j.totalMerc||0};${j.totalStaff||0};${j.totalEgresos||0};${j.resultado||0};${m}\n`;});
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='LaRedo_historial.csv';a.click();
+}
+
+// ============================================================
+// STOCK MODULE
+// ============================================================
+var STOCK = {
+  items: [],         // catálogo de ítems de stock (laredo_stock_items)
+  proveedorFiltro: 'TODOS',
+  modoVista: 'semana', // 'semana' | 'jornada' | 'historial'
+  itemEditando: null,  // para el modal de pedido
+};
+
+const PROVEEDORES_COLORES = {
+  GARU:    '#E36B1A', CASSINA: '#2E86C1', ROCA:   '#E74C3C',
+  AGUA_SC: '#3498DB', VELOCE:  '#F1C40F', PROLIDE:'#27AE60',
+  GANCIA:  '#E67E22', VARIOS:  '#9B59B6'
+};
+
+// Ítems por defecto segun info de Morena
+function stockItemsDefecto() {
+  return [
+    // GARU
+    {id:'SI001',nombre:'Brahma 1.2L porrón',unidad:'unidades',proveedor:'GARU',categoria:'Bebidas',stockMinimo:10,activo:true},
+    {id:'SI002',nombre:'Brahma 473cc lata',unidad:'unidades',proveedor:'GARU',categoria:'Bebidas',stockMinimo:24,activo:true},
+    {id:'SI003',nombre:'Budweiser 1L porrón',unidad:'unidades',proveedor:'GARU',categoria:'Bebidas',stockMinimo:10,activo:true},
+    {id:'SI004',nombre:'Budweiser 473cc lata',unidad:'unidades',proveedor:'GARU',categoria:'Bebidas',stockMinimo:24,activo:true},
+    {id:'SI005',nombre:'Corona 330cc',unidad:'unidades',proveedor:'GARU',categoria:'Bebidas',stockMinimo:12,activo:true},
+    {id:'SI006',nombre:'Corona Sin Alcohol 330cc',unidad:'unidades',proveedor:'GARU',categoria:'Bebidas',stockMinimo:6,activo:true},
+    {id:'SI007',nombre:'Budweiser vidrio',unidad:'unidades',proveedor:'GARU',categoria:'Bebidas',stockMinimo:12,activo:true},
+    // CASSINA
+    {id:'SI010',nombre:'Fernet Branca 750cc',unidad:'unidades',proveedor:'CASSINA',categoria:'Bebidas',stockMinimo:4,activo:true},
+    {id:'SI011',nombre:'Vino tinto / blanco',unidad:'litros',proveedor:'CASSINA',categoria:'Bebidas',stockMinimo:3,activo:true},
+    {id:'SI012',nombre:'Gaseosa Pritty 1.5L',unidad:'unidades',proveedor:'CASSINA',categoria:'Bebidas',stockMinimo:8,activo:true},
+    {id:'SI013',nombre:'Gaseosa Pritty 3L',unidad:'unidades',proveedor:'CASSINA',categoria:'Bebidas',stockMinimo:6,activo:true},
+    // ROCA
+    {id:'SI020',nombre:'Papa para fritas (kg)',unidad:'kg',proveedor:'ROCA',categoria:'Comidas',stockMinimo:5,activo:true},
+    {id:'SI021',nombre:'Chorizo',unidad:'unidades',proveedor:'ROCA',categoria:'Comidas',stockMinimo:20,activo:true},
+    {id:'SI022',nombre:'Panchos',unidad:'unidades',proveedor:'ROCA',categoria:'Comidas',stockMinimo:20,activo:true},
+    {id:'SI023',nombre:'Pan de pancho',unidad:'unidades',proveedor:'ROCA',categoria:'Comidas',stockMinimo:20,activo:true},
+    {id:'SI024',nombre:'Pan chicharrón',unidad:'unidades',proveedor:'ROCA',categoria:'Comidas',stockMinimo:15,activo:true},
+    {id:'SI025',nombre:'Medialunas',unidad:'unidades',proveedor:'ROCA',categoria:'Comidas',stockMinimo:30,activo:true},
+    {id:'SI026',nombre:'Tortas fritas',unidad:'unidades',proveedor:'ROCA',categoria:'Comidas',stockMinimo:20,activo:true},
+    {id:'SI027',nombre:'Snack Cracket',unidad:'unidades',proveedor:'ROCA',categoria:'Comidas',stockMinimo:10,activo:true},
+    {id:'SI028',nombre:'Girasoles / Pipas',unidad:'bolsas',proveedor:'ROCA',categoria:'Comidas',stockMinimo:6,activo:true},
+    // AGUA SAN CARLOS
+    {id:'SI030',nombre:'Agua San Carlos 6L',unidad:'unidades',proveedor:'AGUA_SC',categoria:'Bebidas',stockMinimo:4,activo:true},
+    {id:'SI031',nombre:'Agua San Carlos 500cc',unidad:'unidades',proveedor:'AGUA_SC',categoria:'Bebidas',stockMinimo:12,activo:true},
+    // VELOCE
+    {id:'SI040',nombre:'Aceite (botella)',unidad:'unidades',proveedor:'VELOCE',categoria:'Insumos',stockMinimo:2,activo:true},
+    {id:'SI041',nombre:'Sal (kg)',unidad:'kg',proveedor:'VELOCE',categoria:'Insumos',stockMinimo:1,activo:true},
+    {id:'SI042',nombre:'Condimentos varios',unidad:'unidades',proveedor:'VELOCE',categoria:'Insumos',stockMinimo:1,activo:true},
+    // PROLIDE
+    {id:'SI050',nombre:'Vasos descartables',unidad:'paquetes',proveedor:'PROLIDE',categoria:'Insumos',stockMinimo:2,activo:true},
+    {id:'SI051',nombre:'Platos descartables',unidad:'paquetes',proveedor:'PROLIDE',categoria:'Insumos',stockMinimo:2,activo:true},
+    {id:'SI052',nombre:'Cubiertos descartables',unidad:'paquetes',proveedor:'PROLIDE',categoria:'Insumos',stockMinimo:1,activo:true},
+    {id:'SI053',nombre:'Servilletas',unidad:'paquetes',proveedor:'PROLIDE',categoria:'Insumos',stockMinimo:2,activo:true},
+    {id:'SI054',nombre:'Film/papel aluminio',unidad:'rollos',proveedor:'PROLIDE',categoria:'Insumos',stockMinimo:1,activo:true},
+    // GANCIA
+    {id:'SI060',nombre:'Gancia 1L',unidad:'unidades',proveedor:'GANCIA',categoria:'Bebidas',stockMinimo:4,activo:true},
+    // VARIOS
+    {id:'SI070',nombre:'Encendedores',unidad:'unidades',proveedor:'VARIOS',categoria:'Otros',stockMinimo:10,activo:true},
+    {id:'SI071',nombre:'Hielo (bolsa)',unidad:'bolsas',proveedor:'VARIOS',categoria:'Otros',stockMinimo:5,activo:true},
+    {id:'SI072',nombre:'Gatorade',unidad:'unidades',proveedor:'VARIOS',categoria:'Bebidas',stockMinimo:6,activo:true},
+    {id:'SI073',nombre:'Naipes',unidad:'unidades',proveedor:'VARIOS',categoria:'Otros',stockMinimo:3,activo:true},
+    {id:'SI074',nombre:'Detergente',unidad:'unidades',proveedor:'VARIOS',categoria:'Limpieza',stockMinimo:1,activo:true},
+    {id:'SI075',nombre:'Alcohol en gel',unidad:'unidades',proveedor:'VARIOS',categoria:'Limpieza',stockMinimo:1,activo:true},
+  ];
+}
+
+// Cargar ítems de stock desde Firebase
+async function cargarStockItems() {
+  try {
+    const snap = await db.collection(COL_STOCK_ITEMS).orderBy('proveedor').orderBy('nombre').get();
+    if (!snap.empty) {
+      STOCK.items = snap.docs.map(d=>({id:d.id,...d.data()}));
+    } else {
+      STOCK.items = stockItemsDefecto();
+      await subirStockItemsAFirebase(STOCK.items);
+    }
+  } catch(e) {
+    const cache = localStorage.getItem('laredo_stock_items_cache');
+    if (cache) STOCK.items = JSON.parse(cache);
+    else STOCK.items = stockItemsDefecto();
+  }
+  localStorage.setItem('laredo_stock_items_cache', JSON.stringify(STOCK.items));
+}
+
+async function subirStockItemsAFirebase(items) {
+  const batch = db.batch();
+  items.forEach(item => {
+    const ref = db.collection(COL_STOCK_ITEMS).doc(item.id);
+    batch.set(ref, item, {merge:true});
+  });
+  await batch.commit();
+}
+
+// Render del módulo principal
+async function renderStockModule() {
+  if (!STOCK.items.length) await cargarStockItems();
+  const main = document.getElementById('stock-main');
+
+  // Calcular stock inicial para la jornada actual
+  main.innerHTML = `
+    <div class="stock-mode-tabs">
+      <button class="stock-mode-tab ${STOCK.modoVista==='semana'?'active':''}" onclick="stockCambiarModo('semana')">📋 Pedidos semana</button>
+      <button class="stock-mode-tab ${STOCK.modoVista==='jornada'?'active':''}" onclick="stockCambiarModo('jornada')">📦 Stock jornada</button>
+      <button class="stock-mode-tab ${STOCK.modoVista==='historial'?'active':''}" onclick="stockCambiarModo('historial')">📊 Historial</button>
+    </div>
+    <div id="stock-contenido-inner">
+      <div style="color:#333;text-align:center;padding:24px">Cargando...</div>
+    </div>
+  `;
+
+  await renderStockContenido();
+}
+
+function stockCambiarModo(modo) {
+  STOCK.modoVista = modo;
+  renderStockModule();
+}
+
+function filtrarProveedor(prov) {
+  STOCK.proveedorFiltro = prov;
+  document.querySelectorAll('.prov-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('prov-btn-' + prov);
+  if (btn) btn.classList.add('active');
+  if (document.getElementById('screen-stock').classList.contains('active')) renderStockContenido();
+}
+
+async function renderStockContenido() {
+  const inner = document.getElementById('stock-contenido-inner');
+  if (!inner) return;
+
+  if (STOCK.modoVista === 'semana') await renderStockSemana(inner);
+  else if (STOCK.modoVista === 'jornada') await renderStockJornada(inner);
+  else await renderStockHistorial(inner);
+}
+
+// ---- MODO SEMANA: cargar pedidos ----
+async function renderStockSemana(container) {
+  const semanaId = obtenerIdSemana();
+  const snap = await db.collection(COL_STOCK_MOVS)
+    .where('semanaId','==',semanaId).where('tipo','==','pedido').get()
+    .catch(()=>({docs:[]}));
+  const pedidos = {};
+  snap.docs.forEach(d=>{ const dat=d.data(); pedidos[dat.itemId]={qty:dat.qty,costo:dat.costo,nota:dat.nota,docId:d.id}; });
+
+  const items = itemsFiltrados();
+  if (!items.length) { container.innerHTML='<div style="color:#444;text-align:center;padding:24px;font-size:12px">Sin ítems para este proveedor</div>'; return; }
+
+  const provGroups = agruparPorProveedor(items);
+
+  let html = `
+    <div class="stock-status-bar">
+      <span><span class="stock-status-dot ok"></span>Semana: <strong style="color:#EEE">${semanaId}</strong></span>
+      <span style="color:#555">|</span>
+      <span>Cargá los pedidos que hiciste esta semana. El sábado vas a ver el stock inicial calculado.</span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="btn-stock-guardar" onclick="guardarTodosLosPedidos('${semanaId}')">💾 Guardar pedidos</button>
+    </div>
+  `;
+
+  for (const [prov, provItems] of Object.entries(provGroups)) {
+    const color = PROVEEDORES_COLORES[prov] || '#888';
+    html += `
+      <div style="margin-bottom:16px">
+        <div class="stock-section-title">
+          <span style="color:${color}">● ${prov}</span>
+          <span style="font-size:10px;color:#444">${provItems.length} ítems</span>
+        </div>
+        <table class="stock-table">
+          <thead><tr>
+            <th>Producto</th>
+            <th class="stock-num">Qty pedida</th>
+            <th class="stock-num">Costo/u ($)</th>
+            <th>Nota</th>
+          </tr></thead>
+          <tbody>
+    `;
+    provItems.forEach(item => {
+      const p = pedidos[item.id] || {qty:'',costo:'',nota:''};
+      html += `<tr>
+        <td>
+          <div style="font-weight:600;color:#EEE">${item.nombre}</div>
+          <div style="font-size:10px;color:#555">${item.unidad}</div>
+        </td>
+        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-qty-${item.id}" value="${p.qty||''}" placeholder="0" min="0" step="0.5" inputmode="decimal"></td>
+        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-costo-${item.id}" value="${p.costo||''}" placeholder="0" min="0" inputmode="numeric"></td>
+        <td class="stock-input-cell"><input class="stock-cell-input" type="text" id="pedido-nota-${item.id}" value="${p.nota||''}" placeholder="..." style="width:90px"></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+// ---- MODO JORNADA: stock inicial y final físico ----
+async function renderStockJornada(container) {
+  // Cargar datos de la jornada activa (o la última)
+  const jornadaId = jornadaActiva?.id || null;
+  const jornadaFecha = jornadaActiva?.fecha || new Date().toISOString().split('T')[0];
+  const semanaId = obtenerIdSemana(jornadaFecha);
+
+  // Pedidos de la semana
+  const pedidosSnap = await db.collection(COL_STOCK_MOVS)
+    .where('semanaId','==',semanaId).where('tipo','==','pedido').get()
+    .catch(()=>({docs:[]}));
+  const pedidos = {};
+  pedidosSnap.docs.forEach(d=>{ const dat=d.data(); pedidos[dat.itemId]={qty:parseFloat(dat.qty)||0,costo:dat.costo||0}; });
+
+  // Stock final de la jornada anterior
+  const stockFinalAnterior = await cargarStockFinalAnterior(jornadaFecha);
+
+  // Stock final actual guardado (si ya cargaron)
+  const stockFinalSnap = await db.collection(COL_STOCK_MOVS)
+    .where('jornadaId','==',jornadaId||'SIN_JORNADA').where('tipo','==','final').get()
+    .catch(()=>({docs:[]}));
+  const stockFinal = {};
+  stockFinalSnap.docs.forEach(d=>{ const dat=d.data(); stockFinal[dat.itemId]={qty:dat.qty,docId:d.id}; });
+
+  const items = itemsFiltrados();
+  const provGroups = agruparPorProveedor(items);
+
+  let html = `
+    <div class="stock-status-bar">
+      ${jornadaActiva
+        ? `<span><span class="stock-status-dot ok"></span>Jornada: <strong style="color:#EEE">${jornadaActiva.fechaDisplay}</strong></span>`
+        : `<span><span class="stock-status-dot warn"></span>Sin jornada activa — mostrando cálculo de hoy</span>`
+      }
+      <span style="color:#555">|</span>
+      <span>Stock inicial = final anterior + pedidos semana</span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="btn-stock-guardar" onclick="guardarStockFinal('${jornadaId||'SIN_JORNADA'}')">💾 Guardar stock final</button>
+    </div>
+  `;
+
+  for (const [prov, provItems] of Object.entries(provGroups)) {
+    const color = PROVEEDORES_COLORES[prov] || '#888';
+    html += `
+      <div style="margin-bottom:16px">
+        <div class="stock-section-title">
+          <span style="color:${color}">● ${prov}</span>
+        </div>
+        <table class="stock-table">
+          <thead><tr>
+            <th>Producto</th>
+            <th class="stock-num" style="color:var(--celeste)">Inicial</th>
+            <th class="stock-num" style="color:var(--verde)">Final físico</th>
+            <th class="stock-num">Diferencia</th>
+            <th style="color:#888;font-size:9px">Costo/u</th>
+          </tr></thead>
+          <tbody>
+    `;
+    provItems.forEach(item => {
+      const anterior = parseFloat(stockFinalAnterior[item.id]?.qty)||0;
+      const pedido   = parseFloat(pedidos[item.id]?.qty)||0;
+      const costo    = pedidos[item.id]?.costo||0;
+      const inicial  = anterior + pedido;
+      const finalFis = stockFinal[item.id]?.qty;
+      const diff     = finalFis !== undefined ? (parseFloat(finalFis)-inicial) : null;
+      const diffClass = diff===null?'':'diff'+(diff>=0?diff>0?'':'.ok':'neg');
+      const diffActual = diff!==null?'warn':'';
+
+      html += `<tr>
+        <td>
+          <div style="font-weight:600;color:#EEE">${item.nombre}</div>
+          <div style="font-size:10px;color:#555">${item.unidad} · <span style="color:${color};font-size:9px">${prov}</span></div>
+          <div style="font-size:9px;color:#444">Anterior: ${anterior} + Pedido: ${pedido}</div>
+        </td>
+        <td class="stock-num stock-initial">${inicial}</td>
+        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="final-qty-${item.id}" value="${finalFis!==undefined?finalFis:''}" placeholder="${inicial}" min="0" step="0.5" inputmode="decimal"></td>
+        <td class="stock-num ${diff!==null?(diff<0?'stock-diff neg':(diff>0?'stock-diff warn':'stock-diff ok')):''}">
+          ${diff!==null?(diff>0?'+':'')+diff:'—'}
+        </td>
+        <td class="stock-cost">${costo?'$'+Number(costo).toLocaleString('es-AR'):'—'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+// ---- MODO HISTORIAL ----
+async function renderStockHistorial(container) {
+  const snap = await db.collection(COL_STOCK_MOVS)
+    .where('tipo','==','final')
+    .orderBy('fechaISO','desc')
+    .limit(50).get()
+    .catch(()=>({docs:[]}));
+
+  if (snap.docs.length === 0) {
+    container.innerHTML = '<div style="color:#444;text-align:center;padding:32px;font-size:13px">Sin historial de stock final guardado todavía.<br><span style="font-size:11px;color:#333">Guardá el stock final durante una jornada para verlo acá.</span></div>';
+    return;
+  }
+
+  // Agrupar por jornadaId
+  const byJornada = {};
+  snap.docs.forEach(d => {
+    const dat = d.data();
+    if (!byJornada[dat.jornadaId]) byJornada[dat.jornadaId] = {fecha:dat.fechaISO,items:[]};
+    byJornada[dat.jornadaId].items.push(dat);
+  });
+
+  // Filtrar por proveedor si aplica
+  let html = '';
+  for (const [jId, grupo] of Object.entries(byJornada)) {
+    const itemsGrupo = STOCK.proveedorFiltro==='TODOS'
+      ? grupo.items
+      : grupo.items.filter(i=>{const si=STOCK.items.find(x=>x.id===i.itemId);return si?.proveedor===STOCK.proveedorFiltro;});
+    if (!itemsGrupo.length) continue;
+    const fechaDisplay = grupo.fecha ? new Date(grupo.fecha+'T12:00:00').toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'}) : jId;
+    html += `
+      <div class="hist-stock-card">
+        <div class="hist-stock-card-header">
+          <div style="font-size:13px;font-weight:700;color:#EEE">${fechaDisplay}</div>
+          <div style="font-size:10px;color:#444">${itemsGrupo.length} ítems guardados</div>
+        </div>
+        <table class="stock-table" style="margin-bottom:0">
+          <thead><tr><th>Producto</th><th class="stock-num">Inicial</th><th class="stock-num">Final</th><th class="stock-num">Dif.</th></tr></thead>
+          <tbody>
+    `;
+    itemsGrupo.forEach(i => {
+      const si = STOCK.items.find(x=>x.id===i.itemId);
+      const nombre = si?.nombre || i.itemId;
+      const diff = (parseFloat(i.qty)||0) - (parseFloat(i.stockInicial)||0);
+      html += `<tr>
+        <td>${nombre}<div style="font-size:9px;color:#444">${si?.unidad||''}</div></td>
+        <td class="stock-num stock-initial">${i.stockInicial??'—'}</td>
+        <td class="stock-num stock-final">${i.qty}</td>
+        <td class="stock-num ${diff<0?'stock-diff neg':diff>0?'stock-diff warn':'stock-diff ok'}">${diff>0?'+':''}${diff}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  container.innerHTML = html || '<div style="color:#444;text-align:center;padding:24px">Sin datos para este proveedor</div>';
+}
+
+// ---- HELPERS ----
+function itemsFiltrados() {
+  return STOCK.items.filter(i => i.activo && (STOCK.proveedorFiltro==='TODOS' || i.proveedor===STOCK.proveedorFiltro));
+}
+
+function agruparPorProveedor(items) {
+  const orden = ['GARU','CASSINA','ROCA','AGUA_SC','VELOCE','PROLIDE','GANCIA','VARIOS'];
+  const grupos = {};
+  items.forEach(i => { if (!grupos[i.proveedor]) grupos[i.proveedor]=[]; grupos[i.proveedor].push(i); });
+  const result = {};
+  orden.forEach(p => { if (grupos[p]) result[p]=grupos[p]; });
+  Object.keys(grupos).forEach(p => { if (!result[p]) result[p]=grupos[p]; });
+  return result;
+}
+
+function obtenerIdSemana(fechaISO) {
+  const d = fechaISO ? new Date(fechaISO+'T12:00:00') : new Date();
+  const day = d.getDay();
+  // Semana comienza el domingo
+  const diffLunes = (day === 0) ? -6 : 1 - day;
+  const lunes = new Date(d); lunes.setDate(d.getDate() + diffLunes);
+  return lunes.toISOString().split('T')[0]; // YYYY-MM-DD del lunes
+}
+
+async function cargarStockFinalAnterior(fechaISO) {
+  // Busca la última jornada cerrada antes de la fecha dada
+  try {
+    const snap = await db.collection(COL_JORNADAS)
+      .where('estado','==','cerrada')
+      .orderBy('fecha','desc')
+      .limit(5).get();
+    for (const doc of snap.docs) {
+      const j = doc.data();
+      if (j.fecha < (fechaISO || new Date().toISOString().split('T')[0])) {
+        // Buscar stock final de esa jornada
+        const finalSnap = await db.collection(COL_STOCK_MOVS)
+          .where('jornadaId','==',doc.id).where('tipo','==','final').get();
+        if (!finalSnap.empty) {
+          const result = {};
+          finalSnap.docs.forEach(d=>{const dat=d.data(); result[dat.itemId]={qty:dat.qty};});
+          return result;
+        }
+      }
+    }
+  } catch(e) {}
+  return {};
+}
+
+// ---- GUARDAR PEDIDOS ----
+async function guardarTodosLosPedidos(semanaId) {
+  const items = itemsFiltrados();
+  if (!items.length) { toast('Sin ítems para guardar','naranja'); return; }
+  const batch = db.batch();
+  let count = 0;
+  items.forEach(item => {
+    const qtyEl = document.getElementById('pedido-qty-'+item.id);
+    const costoEl = document.getElementById('pedido-costo-'+item.id);
+    const notaEl = document.getElementById('pedido-nota-'+item.id);
+    if (!qtyEl) return;
+    const qty = parseFloat(qtyEl.value)||0;
+    if (qty === 0 && !costoEl?.value) return;
+    const docId = 'pedido_'+semanaId+'_'+item.id;
+    const ref = db.collection(COL_STOCK_MOVS).doc(docId);
+    batch.set(ref, {
+      id: docId, tipo: 'pedido', semanaId, itemId: item.id,
+      qty, costo: parseFloat(costoEl?.value)||0, nota: notaEl?.value||'',
+      proveedor: item.proveedor, fechaISO: new Date().toISOString().split('T')[0],
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      usuario: usuarioActual?.nombre||'—'
+    }, {merge:true});
+    count++;
+  });
+  try {
+    await batch.commit();
+    toast(`✅ ${count} pedidos guardados para semana ${semanaId}`, 'verde');
+  } catch(e) {
+    toast('Error guardando pedidos: '+e.message,'rojo');
+  }
+}
+
+// ---- GUARDAR STOCK FINAL ----
+async function guardarStockFinal(jornadaId) {
+  const items = itemsFiltrados();
+  const fechaISO = jornadaActiva?.fecha || new Date().toISOString().split('T')[0];
+  const semanaId = obtenerIdSemana(fechaISO);
+
+  // Cargar pedidos y anterior para calcular inicial
+  const pedidosSnap = await db.collection(COL_STOCK_MOVS)
+    .where('semanaId','==',semanaId).where('tipo','==','pedido').get()
+    .catch(()=>({docs:[]}));
+  const pedidos = {};
+  pedidosSnap.docs.forEach(d=>{const dat=d.data();pedidos[dat.itemId]={qty:parseFloat(dat.qty)||0};});
+
+  const stockFinalAnterior = await cargarStockFinalAnterior(fechaISO);
+
+  const batch = db.batch();
+  let count = 0;
+  items.forEach(item => {
+    const el = document.getElementById('final-qty-'+item.id);
+    if (!el || el.value==='') return;
+    const qty = parseFloat(el.value)||0;
+    const anterior = parseFloat(stockFinalAnterior[item.id]?.qty)||0;
+    const pedido   = parseFloat(pedidos[item.id]?.qty)||0;
+    const stockInicial = anterior + pedido;
+    const docId = 'final_'+jornadaId+'_'+item.id;
+    const ref = db.collection(COL_STOCK_MOVS).doc(docId);
+    batch.set(ref, {
+      id: docId, tipo: 'final', jornadaId, itemId: item.id,
+      qty, stockInicial, proveedor: item.proveedor,
+      fechaISO, semanaId,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      usuario: usuarioActual?.nombre||'—'
+    }, {merge:true});
+    count++;
+  });
+
+  try {
+    await batch.commit();
+    toast(`✅ Stock final guardado (${count} ítems)`, 'verde');
+  } catch(e) {
+    toast('Error: '+e.message,'rojo');
+  }
+}
+
+// ---- MODAL NUEVO ÍTEM ----
+function abrirModalNuevoItemStock() { cerrarModal('modal-nuevo-item-stock'); abrirModal('modal-nuevo-item-stock'); }
+
+async function guardarNuevoItemStock() {
+  const nombre = document.getElementById('ns-nombre').value.trim();
+  const unidad = document.getElementById('ns-unidad').value.trim()||'unidades';
+  const proveedor = document.getElementById('ns-proveedor').value;
+  const categoria = document.getElementById('ns-categoria').value;
+  const minimo = parseFloat(document.getElementById('ns-minimo').value)||0;
+  if (!nombre) { toast('Ingresá un nombre','rojo'); return; }
+  const id = 'SI'+Date.now().toString().slice(-6);
+  const item = {id,nombre,unidad,proveedor,categoria,stockMinimo:minimo,activo:true};
+  STOCK.items.push(item);
+  try {
+    await db.collection(COL_STOCK_ITEMS).doc(id).set(item);
+    localStorage.setItem('laredo_stock_items_cache', JSON.stringify(STOCK.items));
+    cerrarModal('modal-nuevo-item-stock');
+    toast(`"${nombre}" agregado al stock`,'verde');
+    renderStockContenido();
+  } catch(e) {
+    toast('Error: '+e.message,'rojo');
+  }
 }
 
 // ============================================================
