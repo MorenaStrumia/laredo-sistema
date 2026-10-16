@@ -327,6 +327,14 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:6px 12px;d
 .stock-status-dot.ok{background:var(--verde)}.stock-status-dot.warn{background:var(--amarillo)}.stock-status-dot.none{background:#333}
 .btn-stock-guardar{padding:8px 18px;border-radius:7px;border:none;background:var(--verde);color:white;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .btn-stock-guardar:active{opacity:.8}
+.btn-stock-accion{padding:3px 7px;border-radius:5px;border:none;cursor:pointer;font-size:11px;font-family:'Inter',sans-serif;font-weight:600;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.btn-stock-accion:active{opacity:.7}
+.btn-stock-accion.edit{background:#2A3A4A;color:#7EC8E3}
+.btn-stock-accion.del{background:#3A1A1A;color:#E77}
+.gestion-item-row{display:flex;align-items:center;gap:8px;padding:7px 6px;border-bottom:1px solid #222;font-size:12px}
+.gestion-item-nombre{flex:1;color:#EEE;font-weight:500}
+.gestion-item-prov{font-size:10px;padding:2px 6px;border-radius:10px;background:#2A2A2A;color:#888;border:1px solid #333}
+.gestion-item-cat{font-size:10px;color:#555}
 .stock-section-title{font-size:11px;font-weight:700;color:#EEE;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
 </style>
 </head>
@@ -448,8 +456,9 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:6px 12px;d
           <button class="prov-btn" id="prov-btn-PROLIDE" onclick="filtrarProveedor('PROLIDE')">🟢 PROLIDE</button>
           <button class="prov-btn" id="prov-btn-GANCIA" onclick="filtrarProveedor('GANCIA')">🍊 GANCIA</button>
           <button class="prov-btn" id="prov-btn-VARIOS" onclick="filtrarProveedor('VARIOS')">📦 VARIOS</button>
-          <div style="margin-top:10px;border-top:1px solid #222;padding-top:10px">
-            <button class="btn-nueva-jornada" onclick="abrirModalNuevoItemStock()">+ Agregar ítem</button>
+          <div style="margin-top:10px;border-top:1px solid #222;padding-top:10px;display:flex;flex-direction:column;gap:5px">
+            <button class="btn-nueva-jornada" onclick="abrirGestionStock(STOCK.proveedorFiltro)" style="font-size:10px">⚙ Gestionar ítems</button>
+            <button class="btn-nueva-jornada" onclick="abrirModalNuevoItemStock()" style="font-size:10px;background:var(--verde)">+ Agregar ítem</button>
           </div>
         </div>
         <div class="stock-main" id="stock-main">
@@ -642,6 +651,58 @@ header{background:#111;border-bottom:2px solid var(--naranja);padding:6px 12px;d
       <button class="btn-cancelar" onclick="cerrarModal('modal-nuevo-item-stock')">Cancelar</button>
       <button class="btn-confirmar" onclick="guardarNuevoItemStock()">✓ Agregar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR ÍTEM STOCK -->
+<div class="modal-overlay" id="modal-editar-item-stock">
+  <div class="modal modal-wide">
+    <div class="resumen-header"><span class="modal-title">✏️ Editar ítem de stock</span><button class="btn-cerrar" onclick="cerrarModal('modal-editar-item-stock')">✕</button></div>
+    <input type="hidden" id="edit-stock-id">
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="edit-ns-nombre" placeholder="Ej: Brahma 1L"></div>
+      <div class="form-group"><label class="form-label">Unidad</label><input type="text" class="form-input" id="edit-ns-unidad" placeholder="Ej: litros, unidades, kg"></div>
+    </div>
+    <div class="form-row form-row-3">
+      <div class="form-group"><label class="form-label">Proveedor *</label>
+        <select class="form-select" id="edit-ns-proveedor">
+          <option value="GARU">GARU</option>
+          <option value="CASSINA">CASSINA</option>
+          <option value="ROCA">ROCA</option>
+          <option value="AGUA_SC">AGUA SAN CARLOS</option>
+          <option value="VELOCE">VELOCE</option>
+          <option value="PROLIDE">PROLIDE</option>
+          <option value="GANCIA">GANCIA</option>
+          <option value="VARIOS">VARIOS</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Categoría</label>
+        <select class="form-select" id="edit-ns-categoria">
+          <option value="Bebidas">Bebidas</option>
+          <option value="Comidas">Comidas</option>
+          <option value="Insumos">Insumos</option>
+          <option value="Limpieza">Limpieza</option>
+          <option value="Otros">Otros</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Stock mínimo</label><input type="number" class="form-input" id="edit-ns-minimo" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancelar" onclick="cerrarModal('modal-editar-item-stock')">Cancelar</button>
+      <button class="btn-danger" onclick="eliminarItemStock(document.getElementById('edit-stock-id').value)" style="flex:0.7">🗑 Eliminar</button>
+      <button class="btn-confirmar" onclick="guardarEdicionItemStock()">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GESTIÓN ÍTEMS (lista por proveedor) -->
+<div class="modal-overlay" id="modal-gestion-stock">
+  <div class="gestion-modal">
+    <div class="resumen-header"><span class="resumen-titulo" id="gestion-stock-titulo">📦 Ítems de stock</span><button class="btn-cerrar" onclick="cerrarModal('modal-gestion-stock')">✕</button></div>
+    <div style="margin-bottom:10px">
+      <button class="btn-secondary" onclick="cerrarModal('modal-gestion-stock');abrirModalNuevoItemStock()" style="font-size:11px">+ Agregar nuevo ítem</button>
+    </div>
+    <div id="gestion-stock-lista"></div>
   </div>
 </div>
 
@@ -1562,6 +1623,7 @@ async function renderStockSemana(container) {
             <th class="stock-num">Qty pedida</th>
             <th class="stock-num">Costo/u ($)</th>
             <th>Nota</th>
+            <th style="width:30px"></th>
           </tr></thead>
           <tbody>
     `;
@@ -1575,6 +1637,7 @@ async function renderStockSemana(container) {
         <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-qty-${item.id}" value="${p.qty||''}" placeholder="0" min="0" step="0.5" inputmode="decimal"></td>
         <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-costo-${item.id}" value="${p.costo||''}" placeholder="0" min="0" inputmode="numeric"></td>
         <td class="stock-input-cell"><input class="stock-cell-input" type="text" id="pedido-nota-${item.id}" value="${p.nota||''}" placeholder="..." style="width:90px"></td>
+        <td><button class="btn-stock-accion edit" onclick="abrirEditarItemStock('${item.id}')" title="Editar ítem">✏️</button></td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -1638,6 +1701,7 @@ async function renderStockJornada(container) {
             <th class="stock-num" style="color:var(--verde)">Final físico</th>
             <th class="stock-num">Diferencia</th>
             <th style="color:#888;font-size:9px">Costo/u</th>
+            <th style="width:30px"></th>
           </tr></thead>
           <tbody>
     `;
@@ -1663,6 +1727,7 @@ async function renderStockJornada(container) {
           ${diff!==null?(diff>0?'+':'')+diff:'—'}
         </td>
         <td class="stock-cost">${costo?'$'+Number(costo).toLocaleString('es-AR'):'—'}</td>
+        <td><button class="btn-stock-accion edit" onclick="abrirEditarItemStock('${item.id}')" title="Editar ítem">✏️</button></td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -1848,6 +1913,102 @@ async function guardarStockFinal(jornadaId) {
     toast(`✅ Stock final guardado (${count} ítems)`, 'verde');
   } catch(e) {
     toast('Error: '+e.message,'rojo');
+  }
+}
+
+// ---- GESTIÓN DE ÍTEMS (editar, eliminar, listar por proveedor) ----
+function abrirGestionStock(prov) {
+  const titulo = document.getElementById('gestion-stock-titulo');
+  const lista  = document.getElementById('gestion-stock-lista');
+  const items  = prov === 'TODOS'
+    ? STOCK.items
+    : STOCK.items.filter(i => i.proveedor === prov);
+
+  const labels = {GARU:'🟠 GARU',CASSINA:'🔵 CASSINA',ROCA:'🔴 ROCA',AGUA_SC:'💧 AGUA SC',VELOCE:'🟡 VELOCE',PROLIDE:'🟢 PROLIDE',GANCIA:'🍊 GANCIA',VARIOS:'📦 VARIOS',TODOS:'🏪 Todos'};
+  titulo.textContent = '📦 Ítems — ' + (labels[prov] || prov);
+
+  if (!items.length) {
+    lista.innerHTML = '<div style="color:#444;text-align:center;padding:24px;font-size:12px">Sin ítems para este proveedor</div>';
+  } else {
+    const orden = ['GARU','CASSINA','ROCA','AGUA_SC','VELOCE','PROLIDE','GANCIA','VARIOS'];
+    const grupos = {};
+    items.forEach(i => { if (!grupos[i.proveedor]) grupos[i.proveedor]=[]; grupos[i.proveedor].push(i); });
+    let html = '';
+    const provs = prov === 'TODOS' ? orden.filter(p => grupos[p]) : [prov];
+    provs.forEach(p => {
+      if (!grupos[p]) return;
+      if (prov === 'TODOS') html += `<div style="font-size:10px;font-weight:700;color:var(--naranja);text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-top:1px solid #222;margin-top:4px">${labels[p]||p}</div>`;
+      grupos[p].forEach(item => {
+        const estado = item.activo !== false ? '' : ' style="opacity:0.4"';
+        html += `<div class="gestion-item-row"${estado}>
+          <div class="gestion-item-nombre">${item.nombre} <span class="gestion-item-cat">${item.unidad||''}</span></div>
+          <span class="gestion-item-prov">${labels[item.proveedor]||item.proveedor}</span>
+          <button class="btn-stock-accion edit" onclick="abrirEditarItemStock('${item.id}')">✏️</button>
+          <button class="btn-stock-accion del" onclick="confirmarEliminarItemStock('${item.id}','${item.nombre.replace(/'/g,'\\\'')}')" title="Eliminar">🗑</button>
+        </div>`;
+      });
+    });
+    lista.innerHTML = html;
+  }
+  abrirModal('modal-gestion-stock');
+}
+
+function abrirEditarItemStock(itemId) {
+  const item = STOCK.items.find(i => i.id === itemId);
+  if (!item) { toast('Ítem no encontrado','rojo'); return; }
+  document.getElementById('edit-stock-id').value = item.id;
+  document.getElementById('edit-ns-nombre').value = item.nombre || '';
+  document.getElementById('edit-ns-unidad').value = item.unidad || '';
+  document.getElementById('edit-ns-proveedor').value = item.proveedor || 'VARIOS';
+  document.getElementById('edit-ns-categoria').value = item.categoria || 'Bebidas';
+  document.getElementById('edit-ns-minimo').value = item.stockMinimo || 0;
+  // Cerrar modal de gestión si está abierto
+  cerrarModal('modal-gestion-stock');
+  abrirModal('modal-editar-item-stock');
+}
+
+async function guardarEdicionItemStock() {
+  const id     = document.getElementById('edit-stock-id').value;
+  const nombre = document.getElementById('edit-ns-nombre').value.trim();
+  const unidad = document.getElementById('edit-ns-unidad').value.trim() || 'unidades';
+  const proveedor = document.getElementById('edit-ns-proveedor').value;
+  const categoria = document.getElementById('edit-ns-categoria').value;
+  const minimo = parseFloat(document.getElementById('edit-ns-minimo').value) || 0;
+  if (!nombre) { toast('Ingresá un nombre','rojo'); return; }
+  const idx = STOCK.items.findIndex(i => i.id === id);
+  if (idx === -1) { toast('Ítem no encontrado','rojo'); return; }
+  const updates = { nombre, unidad, proveedor, categoria, stockMinimo: minimo };
+  try {
+    await db.collection(COL_STOCK_ITEMS).doc(id).update(updates);
+    Object.assign(STOCK.items[idx], updates);
+    localStorage.setItem('laredo_stock_items_cache', JSON.stringify(STOCK.items));
+    cerrarModal('modal-editar-item-stock');
+    toast(`"${nombre}" actualizado`,'verde');
+    renderStockContenido();
+  } catch(e) {
+    toast('Error: ' + e.message,'rojo');
+  }
+}
+
+function confirmarEliminarItemStock(itemId, nombre) {
+  if (!confirm(`¿Eliminás "${nombre}" del stock? Esta acción no se puede deshacer.`)) return;
+  eliminarItemStock(itemId);
+}
+
+async function eliminarItemStock(itemId) {
+  const idx = STOCK.items.findIndex(i => i.id === itemId);
+  const nombre = STOCK.items[idx]?.nombre || itemId;
+  try {
+    // Marcar como inactivo en Firestore (soft delete)
+    await db.collection(COL_STOCK_ITEMS).doc(itemId).update({ activo: false });
+    if (idx !== -1) STOCK.items[idx].activo = false;
+    localStorage.setItem('laredo_stock_items_cache', JSON.stringify(STOCK.items));
+    cerrarModal('modal-editar-item-stock');
+    cerrarModal('modal-gestion-stock');
+    toast(`"${nombre}" eliminado del stock`,'naranja');
+    renderStockContenido();
+  } catch(e) {
+    toast('Error: ' + e.message,'rojo');
   }
 }
 
