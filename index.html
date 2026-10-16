@@ -1544,7 +1544,8 @@ async function subirStockItemsAFirebase(items) {
 
 // Render del módulo principal
 async function renderStockModule() {
-  if (!STOCK.items.length) await cargarStockItems();
+  // Siempre recargar desde Firestore para tener datos frescos en todos los dispositivos
+  await cargarStockItems();
   const main = document.getElementById('stock-main');
 
   // Calcular stock inicial para la jornada actual
@@ -2078,6 +2079,18 @@ db.collection(COL_PRODUCTOS).onSnapshot(snap => {
     renderProductos(); // actualiza en todos los dispositivos
   }
 }, e => console.log('Productos offline'));
+
+// Listener en tiempo real para ítems de stock — sincroniza cambios entre dispositivos
+db.collection(COL_STOCK_ITEMS).onSnapshot(snap => {
+  if (!snap.empty) {
+    STOCK.items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    localStorage.setItem('laredo_stock_items_cache', JSON.stringify(STOCK.items));
+    // Si el módulo de stock está visible, actualizar la vista
+    if (document.getElementById('screen-stock')?.classList.contains('active')) {
+      renderStockContenido();
+    }
+  }
+}, e => console.log('Stock items offline'));
 </script>
 </body>
 </html>
