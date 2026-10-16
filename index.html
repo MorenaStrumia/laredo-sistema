@@ -1979,7 +1979,7 @@ async function guardarEdicionItemStock() {
   if (idx === -1) { toast('Ítem no encontrado','rojo'); return; }
   const updates = { nombre, unidad, proveedor, categoria, stockMinimo: minimo };
   try {
-    await db.collection(COL_STOCK_ITEMS).doc(id).update(updates);
+    await db.collection(COL_STOCK_ITEMS).doc(id).set(updates, {merge:true});
     Object.assign(STOCK.items[idx], updates);
     localStorage.setItem('laredo_stock_items_cache', JSON.stringify(STOCK.items));
     cerrarModal('modal-editar-item-stock');
@@ -2000,7 +2000,7 @@ async function eliminarItemStock(itemId) {
   const nombre = STOCK.items[idx]?.nombre || itemId;
   try {
     // Marcar como inactivo en Firestore (soft delete)
-    await db.collection(COL_STOCK_ITEMS).doc(itemId).update({ activo: false });
+    await db.collection(COL_STOCK_ITEMS).doc(itemId).set({ activo: false }, {merge:true});
     if (idx !== -1) STOCK.items[idx].activo = false;
     localStorage.setItem('laredo_stock_items_cache', JSON.stringify(STOCK.items));
     cerrarModal('modal-editar-item-stock');
