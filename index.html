@@ -1623,20 +1623,24 @@ async function renderStockSemana(container) {
             <th>Producto</th>
             <th class="stock-num">Qty pedida</th>
             <th class="stock-num">Costo/u ($)</th>
+            <th class="stock-num" style="color:var(--amarillo)">Precio venta</th>
+            <th class="stock-num" style="color:var(--verde)">Margen</th>
             <th>Nota</th>
             <th style="width:30px"></th>
           </tr></thead>
           <tbody>
     `;
     provItems.forEach(item => {
-      const p = pedidos[item.id] || {qty:'',costo:'',nota:''};
+      const p = pedidos[item.id] || {qty:'',costo:'',nota:'',precioVenta:''};
       html += `<tr>
         <td>
           <div style="font-weight:600;color:#EEE">${item.nombre}</div>
           <div style="font-size:10px;color:#555">${item.unidad}</div>
         </td>
         <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-qty-${item.id}" value="${p.qty||''}" placeholder="0" min="0" step="0.5" inputmode="decimal"></td>
-        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-costo-${item.id}" value="${p.costo||''}" placeholder="0" min="0" inputmode="numeric"></td>
+        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-costo-${item.id}" value="${p.costo||''}" placeholder="0" min="0" inputmode="numeric" oninput="calcularMargenFila('${item.id}')"></td>
+        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-precio-${item.id}" value="${p.precioVenta||''}" placeholder="0" min="0" inputmode="numeric" oninput="calcularMargenFila('${item.id}')" style="border-color:#F1C40F44"></td>
+        <td class="stock-num" id="margen-${item.id}" style="font-weight:700;font-size:12px">${calcularMargenTexto(p.costo, p.precioVenta)}</td>
         <td class="stock-input-cell"><input class="stock-cell-input" type="text" id="pedido-nota-${item.id}" value="${p.nota||''}" placeholder="..." style="width:90px"></td>
         <td><button class="btn-stock-accion edit" onclick="abrirEditarItemStock('${item.id}')" title="Editar ítem">✏️</button></td>
       </tr>`;
@@ -1698,7 +1702,7 @@ async function renderStockJornada(container) {
         <table class="stock-table">
           <thead><tr>
             <th>Producto</th>
-            <th class="stock-num" style="color:var(--celeste)">Inicial</th>
+            <th class="stock-num" style="color:var(--celeste)">Inicial <span style="font-size:8px;opacity:.6">(editable)</span></th>
             <th class="stock-num" style="color:var(--verde)">Final físico</th>
             <th class="stock-num">Diferencia</th>
             <th style="color:#888;font-size:9px">Costo/u</th>
@@ -1710,22 +1714,28 @@ async function renderStockJornada(container) {
       const anterior = parseFloat(stockFinalAnterior[item.id]?.qty)||0;
       const pedido   = parseFloat(pedidos[item.id]?.qty)||0;
       const costo    = pedidos[item.id]?.costo||0;
-      const inicial  = anterior + pedido;
+      // Si hay un ajuste manual guardado, usarlo como inicial; si no, calcularlo
+      const ajusteGuardado = stockFinal[item.id]?.stockInicialAjustado;
+      const inicialCalc  = anterior + pedido;
+      const inicialUsado = ajusteGuardado !== undefined ? ajusteGuardado : inicialCalc;
       const finalFis = stockFinal[item.id]?.qty;
-      const diff     = finalFis !== undefined ? (parseFloat(finalFis)-inicial) : null;
-      const diffClass = diff===null?'':'diff'+(diff>=0?diff>0?'':'.ok':'neg');
-      const diffActual = diff!==null?'warn':'';
+      const diff = finalFis !== undefined ? (parseFloat(finalFis) - parseFloat(inicialUsado)) : null;
 
       html += `<tr>
         <td>
           <div style="font-weight:600;color:#EEE">${item.nombre}</div>
           <div style="font-size:10px;color:#555">${item.unidad} · <span style="color:${color};font-size:9px">${prov}</span></div>
-          <div style="font-size:9px;color:#444">Anterior: ${anterior} + Pedido: ${pedido}</div>
+          <div style="font-size:9px;color:#444">Anterior: ${anterior} + Pedido: ${pedido} = <strong style="color:#7EC8E3">${inicialCalc}</strong>${ajusteGuardado!==undefined?' → ajustado':''}
+          </div>
         </td>
-        <td class="stock-num stock-initial">${inicial}</td>
-        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="final-qty-${item.id}" value="${finalFis!==undefined?finalFis:''}" placeholder="${inicial}" min="0" step="0.5" inputmode="decimal"></td>
-        <td class="stock-num ${diff!==null?(diff<0?'stock-diff neg':(diff>0?'stock-diff warn':'stock-diff ok')):''}">
-          ${diff!==null?(diff>0?'+':'')+diff:'—'}
+        <td class="stock-input-cell">
+          <input class="stock-cell-input" type="number" id="inicial-qty-${item.id}" value="${inicialUsado}" min="0" step="0.5" inputmode="decimal"
+            style="border-color:#2E86C155;color:var(--celeste);font-weight:700"
+            oninput="recalcularDiff('${item.id}')">
+        </td>
+        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="final-qty-${item.id}" value="${finalFis!==undefined?finalFis:''}" placeholder="${inicialUsado}" min="0" step="0.5" inputmode="decimal" oninput="recalcularDiff('${item.id}')"></td>
+        <td class="stock-num ${diff!==null?(diff<0?'stock-diff neg':(diff>0?'stock-diff warn':'stock-diff ok')):'stock-diff ok'}" id="diff-${item.id}">
+          ${diff!==null?(diff>0?'+':'')+diff.toFixed(1):'—'}
         </td>
         <td class="stock-cost">${costo?'$'+Number(costo).toLocaleString('es-AR'):'—'}</td>
         <td><button class="btn-stock-accion edit" onclick="abrirEditarItemStock('${item.id}')" title="Editar ítem">✏️</button></td>
@@ -1793,6 +1803,39 @@ async function renderStockHistorial(container) {
   container.innerHTML = html || '<div style="color:#444;text-align:center;padding:24px">Sin datos para este proveedor</div>';
 }
 
+// ---- MARGEN Y RECÁLCULO EN TIEMPO REAL ----
+function calcularMargenTexto(costo, precio) {
+  const c = parseFloat(costo)||0;
+  const p = parseFloat(precio)||0;
+  if (!c || !p) return '<span style="color:#444">—</span>';
+  const margen = ((p - c) / p * 100).toFixed(1);
+  const color = margen >= 50 ? 'var(--verde)' : margen >= 30 ? 'var(--amarillo)' : 'var(--rojo)';
+  return `<span style="color:${color}">${margen}%</span>`;
+}
+
+function calcularMargenFila(itemId) {
+  const costoEl = document.getElementById('pedido-costo-'+itemId);
+  const precioEl = document.getElementById('pedido-precio-'+itemId);
+  const margenEl = document.getElementById('margen-'+itemId);
+  if (!margenEl) return;
+  margenEl.innerHTML = calcularMargenTexto(costoEl?.value, precioEl?.value);
+}
+
+function recalcularDiff(itemId) {
+  const inicialEl = document.getElementById('inicial-qty-'+itemId);
+  const finalEl = document.getElementById('final-qty-'+itemId);
+  const diffEl = document.getElementById('diff-'+itemId);
+  if (!diffEl || !inicialEl || !finalEl || finalEl.value==='') {
+    if (diffEl) diffEl.textContent = '—';
+    return;
+  }
+  const ini = parseFloat(inicialEl.value)||0;
+  const fin = parseFloat(finalEl.value)||0;
+  const diff = fin - ini;
+  diffEl.textContent = (diff>0?'+':'')+diff.toFixed(1);
+  diffEl.className = 'stock-num stock-diff ' + (diff < 0 ? 'neg' : diff > 0 ? 'warn' : 'ok');
+}
+
 // ---- HELPERS ----
 function itemsFiltrados() {
   return STOCK.items.filter(i => i.activo && (STOCK.proveedorFiltro==='TODOS' || i.proveedor===STOCK.proveedorFiltro));
@@ -1851,6 +1894,7 @@ async function guardarTodosLosPedidos(semanaId) {
     const qtyEl = document.getElementById('pedido-qty-'+item.id);
     const costoEl = document.getElementById('pedido-costo-'+item.id);
     const notaEl = document.getElementById('pedido-nota-'+item.id);
+    const precioEl = document.getElementById('pedido-precio-'+item.id);
     if (!qtyEl) return;
     const qty = parseFloat(qtyEl.value)||0;
     if (qty === 0 && !costoEl?.value) return;
@@ -1859,6 +1903,7 @@ async function guardarTodosLosPedidos(semanaId) {
     batch.set(ref, {
       id: docId, tipo: 'pedido', semanaId, itemId: item.id,
       qty, costo: parseFloat(costoEl?.value)||0, nota: notaEl?.value||'',
+      precioVenta: parseFloat(precioEl?.value)||0,
       proveedor: item.proveedor, fechaISO: new Date().toISOString().split('T')[0],
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       usuario: usuarioActual?.nombre||'—'
@@ -1891,17 +1936,24 @@ async function guardarStockFinal(jornadaId) {
   const batch = db.batch();
   let count = 0;
   items.forEach(item => {
-    const el = document.getElementById('final-qty-'+item.id);
-    if (!el || el.value==='') return;
-    const qty = parseFloat(el.value)||0;
+    const elFinal = document.getElementById('final-qty-'+item.id);
+    const elInicial = document.getElementById('inicial-qty-'+item.id);
+    if (!elFinal || elFinal.value==='') return;
+    const qty = parseFloat(elFinal.value)||0;
     const anterior = parseFloat(stockFinalAnterior[item.id]?.qty)||0;
     const pedido   = parseFloat(pedidos[item.id]?.qty)||0;
-    const stockInicial = anterior + pedido;
+    const stockInicialCalc = anterior + pedido;
+    // Si el usuario editó el inicial manualmente, guardar el ajuste
+    const stockInicialAjustado = elInicial ? parseFloat(elInicial.value) : stockInicialCalc;
+    const ajustado = stockInicialAjustado !== stockInicialCalc;
     const docId = 'final_'+jornadaId+'_'+item.id;
     const ref = db.collection(COL_STOCK_MOVS).doc(docId);
     batch.set(ref, {
       id: docId, tipo: 'final', jornadaId, itemId: item.id,
-      qty, stockInicial, proveedor: item.proveedor,
+      qty, stockInicial: stockInicialAjustado,
+      stockInicialCalculado: stockInicialCalc,
+      stockInicialAjustado: ajustado ? stockInicialAjustado : null,
+      proveedor: item.proveedor,
       fechaISO, semanaId,
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       usuario: usuarioActual?.nombre||'—'
