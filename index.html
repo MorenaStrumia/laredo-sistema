@@ -1361,7 +1361,7 @@ function renderEmpleadosCierre(){const c=document.getElementById('empleados-list
 function renderBalancePreview(){if(!jornadaActiva)return;const j=jornadaActiva,ts=empleadosCierre.reduce((s,e)=>s+e.monto,0),te=j.totalFijos+j.totalMerc+ts,r=j.totalIngresos-te;document.getElementById('cierre-balance-preview').innerHTML=`<div class="balance-row ingreso"><span class="label">Ventas POS</span><span class="monto">$${(j.ventasPOS||0).toLocaleString('es-AR')}</span></div><div class="balance-row ingreso"><span class="label">Otros ingresos</span><span class="monto">$${((j.totalIngresos||0)-(j.ventasPOS||0)).toLocaleString('es-AR')}</span></div><div class="balance-row egreso"><span class="label">Gastos fijos</span><span class="monto">- $${(j.totalFijos||0).toLocaleString('es-AR')}</span></div><div class="balance-row egreso"><span class="label">Mercadería</span><span class="monto">- $${(j.totalMerc||0).toLocaleString('es-AR')}</span></div><div class="balance-row egreso"><span class="label">Staff</span><span class="monto">- $${ts.toLocaleString('es-AR')}</span></div><div class="balance-row total ${r>=0?'ingreso':'egreso'}"><span class="label">RESULTADO</span><span class="monto" style="font-size:18px">${r>=0?'+':'-'}$${Math.abs(r).toLocaleString('es-AR')}</span></div>`;}
 async function confirmarCierre(){if(!jornadaActiva)return;if(!confirm('¿Cerrar la caja?'))return;for(const emp of empleadosCierre){const mov={id:'staff_'+Date.now()+'_'+Math.random(),jornadaId:jornadaActiva.id,tipo:'staff',concepto:'Staff: '+emp.nombre,monto:emp.monto,fecha:new Date().toLocaleDateString('es-AR'),hora:new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}),timestamp:firebase.firestore.FieldValue.serverTimestamp(),usuario:usuarioActual?.nombre||'—'};await db.collection(COL_MOVIMIENTOS).doc(mov.id).set(mov);}await recalcularTotalesJornada(jornadaActiva.id);
 // Auto-guardar stock final al cerrar caja (guarda todos los ítems que tengan valor ingresado; si no hay pantalla de stock abierta, guarda los que ya estaban guardados en Firestore)
-try { await guardarStockFinalSilencioso(jornadaActiva.id); } catch(e){ console.warn('Stock final auto-save:', e); }
+try { await guardarStockCarga(); } catch(e){ console.warn('Stock auto-save on close:', e); }
 await db.collection(COL_JORNADAS).doc(jornadaActiva.id).update({estado:'cerrada',fechaCierre:new Date().toISOString(),cerradoPor:usuarioActual?.nombre||'—'});llamarSheets('guardar_jornada',{jornada:{...jornadaActiva,estado:'cerrada'},usuario:usuarioActual?.nombre});if(unsubscribeJornada)unsubscribeJornada();if(unsubscribeMovimientos)unsubscribeMovimientos();jornadaActiva=null;localStorage.removeItem('laredo_jornada_activa');actualizarHeaderJornada();cerrarModal('modal-cierre');renderListaJornadas();renderHistorial();toast('✅ Caja cerrada correctamente','verde');}
 
 // LISTA Y DETALLE
@@ -1452,13 +1452,15 @@ async function exportarHistorialCSV(){
 }
 
 // ============================================================
-// STOCK MODULE
+// STOCK MODULE — versión simplificada
+// Un solo módulo: cargás inicial/pedido/final por fecha y guardás.
+// Historial separado muestra tabla de fechas × productos.
 // ============================================================
 var STOCK = {
-  items: [],         // catálogo de ítems de stock (laredo_stock_items)
+  items: [],
   proveedorFiltro: 'TODOS',
-  modoVista: 'semana', // 'semana' | 'jornada' | 'historial'
-  itemEditando: null,  // para el modal de pedido
+  fechaActual: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+  modoVista: 'carga', // 'carga' | 'historial'
 };
 
 const PROVEEDORES_COLORES = {
@@ -1547,22 +1549,17 @@ async function subirStockItemsAFirebase(items) {
 
 // Render del módulo principal
 async function renderStockModule() {
-  // Siempre recargar desde Firestore para tener datos frescos en todos los dispositivos
   await cargarStockItems();
   const main = document.getElementById('stock-main');
-
-  // Calcular stock inicial para la jornada actual
   main.innerHTML = `
     <div class="stock-mode-tabs">
-      <button class="stock-mode-tab ${STOCK.modoVista==='semana'?'active':''}" onclick="stockCambiarModo('semana')">📋 Pedidos semana</button>
-      <button class="stock-mode-tab ${STOCK.modoVista==='jornada'?'active':''}" onclick="stockCambiarModo('jornada')">📦 Stock jornada</button>
+      <button class="stock-mode-tab ${STOCK.modoVista==='carga'?'active':''}" onclick="stockCambiarModo('carga')">📦 Carga de stock</button>
       <button class="stock-mode-tab ${STOCK.modoVista==='historial'?'active':''}" onclick="stockCambiarModo('historial')">📊 Historial</button>
     </div>
     <div id="stock-contenido-inner">
       <div style="color:#333;text-align:center;padding:24px">Cargando...</div>
     </div>
   `;
-
   await renderStockContenido();
 }
 
@@ -1574,7 +1571,7 @@ function stockCambiarModo(modo) {
 function filtrarProveedor(prov) {
   STOCK.proveedorFiltro = prov;
   document.querySelectorAll('.prov-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('prov-btn-' + prov);
+  const btn = document.getElementById('prov-btn-' + (prov === 'TODOS' ? 'todos' : prov));
   if (btn) btn.classList.add('active');
   if (document.getElementById('screen-stock').classList.contains('active')) renderStockContenido();
 }
@@ -1582,34 +1579,46 @@ function filtrarProveedor(prov) {
 async function renderStockContenido() {
   const inner = document.getElementById('stock-contenido-inner');
   if (!inner) return;
-
-  if (STOCK.modoVista === 'semana') await renderStockSemana(inner);
-  else if (STOCK.modoVista === 'jornada') await renderStockJornada(inner);
+  if (STOCK.modoVista === 'carga') await renderStockCarga(inner);
   else await renderStockHistorial(inner);
 }
 
-// ---- MODO SEMANA: cargar pedidos ----
-async function renderStockSemana(container) {
-  const semanaId = obtenerIdSemana();
-  const snap = await db.collection(COL_STOCK_MOVS)
-    .where('semanaId','==',semanaId).where('tipo','==','pedido').get()
-    .catch(()=>({docs:[]}));
-  const pedidos = {};
-  snap.docs.forEach(d=>{ const dat=d.data(); pedidos[dat.itemId]={qty:dat.qty,costo:dat.costo,nota:dat.nota,docId:d.id}; });
-
+// ---- MODO CARGA: módulo único de stock por fecha ----
+async function renderStockCarga(container) {
   const items = itemsFiltrados();
-  if (!items.length) { container.innerHTML='<div style="color:#444;text-align:center;padding:24px;font-size:12px">Sin ítems para este proveedor</div>'; return; }
+  if (!items.length) {
+    container.innerHTML = '<div style="color:#444;text-align:center;padding:24px;font-size:12px">Sin ítems para este proveedor</div>';
+    return;
+  }
+
+  const fechaHoy = new Date().toISOString().split('T')[0];
+  if (!STOCK.fechaActual) STOCK.fechaActual = fechaHoy;
+  const fechaSel = STOCK.fechaActual;
+
+  // Cargar datos guardados para esta fecha
+  const snapFecha = await db.collection(COL_STOCK_MOVS)
+    .where('tipo','==','final')
+    .where('fechaISO','==',fechaSel)
+    .get()
+    .catch(()=>({docs:[]}));
+  const guardados = {};
+  snapFecha.docs.forEach(d => {
+    const dat = d.data();
+    guardados[dat.itemId] = { qty: dat.qty, stockInicial: dat.stockInicial, pedidoQty: dat.pedidoQty, pedidoPrecio: dat.pedidoPrecio };
+  });
 
   const provGroups = agruparPorProveedor(items);
 
   let html = `
-    <div class="stock-status-bar">
-      <span><span class="stock-status-dot ok"></span>Semana: <strong style="color:#EEE">${semanaId}</strong></span>
-      <span style="color:#555">|</span>
-      <span>Cargá los pedidos que hiciste esta semana. El sábado vas a ver el stock inicial calculado.</span>
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-      <button class="btn-stock-guardar" onclick="guardarTodosLosPedidos('${semanaId}')">💾 Guardar pedidos</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <label style="color:#888;font-size:12px;font-weight:600">📅 Fecha:</label>
+      <input type="date" id="stock-fecha-input" value="${fechaSel}"
+        style="background:#111;border:1px solid #333;color:#EEE;padding:5px 10px;border-radius:6px;font-size:13px"
+        onchange="stockCambiarFecha(this.value)">
+      <div style="flex:1"></div>
+      <button class="btn-stock-guardar" onclick="guardarStockCarga()" style="background:#1a472a">💾 Guardar</button>
+      <button class="btn-stock-guardar" onclick="limpiarStockCarga()" style="background:#2a1a1a;color:#E74C3C">🧹 Limpiar</button>
+      <button class="btn-stock-guardar" onclick="traerStockAnterior()" style="background:#1a2a3a;color:#7EC8E3">⬆️ Traer stock anterior</button>
     </div>
   `;
 
@@ -1624,145 +1633,44 @@ async function renderStockSemana(container) {
         <table class="stock-table">
           <thead><tr>
             <th>Producto</th>
-            <th class="stock-num">Qty pedida</th>
-            <th class="stock-num">Costo/u ($)</th>
-            <th class="stock-num" style="color:var(--amarillo)">Precio venta</th>
-            <th class="stock-num" style="color:var(--verde)">Margen</th>
-            <th>Nota</th>
-            <th style="width:30px"></th>
+            <th class="stock-num" style="color:var(--celeste)">Inicial</th>
+            <th class="stock-num" style="color:var(--naranja)">Pedido (qty)</th>
+            <th class="stock-num" style="color:var(--amarillo)">Pedido ($/u)</th>
+            <th class="stock-num" style="color:var(--verde)">Final</th>
           </tr></thead>
           <tbody>
     `;
     provItems.forEach(item => {
-      const p = pedidos[item.id] || {qty:'',costo:'',nota:'',precioVenta:''};
+      const g = guardados[item.id] || {};
       html += `<tr>
         <td>
           <div style="font-weight:600;color:#EEE">${item.nombre}</div>
           <div style="font-size:10px;color:#555">${item.unidad}</div>
         </td>
-        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-qty-${item.id}" value="${p.qty||''}" placeholder="0" min="0" step="0.5" inputmode="decimal"></td>
-        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-costo-${item.id}" value="${p.costo||''}" placeholder="0" min="0" inputmode="numeric" oninput="calcularMargenFila('${item.id}')"></td>
-        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="pedido-precio-${item.id}" value="${p.precioVenta||''}" placeholder="0" min="0" inputmode="numeric" oninput="calcularMargenFila('${item.id}')" style="border-color:#F1C40F44"></td>
-        <td class="stock-num" id="margen-${item.id}" style="font-weight:700;font-size:12px">${calcularMargenTexto(p.costo, p.precioVenta)}</td>
-        <td class="stock-input-cell"><input class="stock-cell-input" type="text" id="pedido-nota-${item.id}" value="${p.nota||''}" placeholder="..." style="width:90px"></td>
-        <td><button class="btn-stock-accion edit" onclick="abrirEditarItemStock('${item.id}')" title="Editar ítem">✏️</button></td>
-      </tr>`;
-    });
-    html += `</tbody></table></div>`;
-  }
-
-  container.innerHTML = html;
-}
-
-// ---- MODO JORNADA: stock inicial y final físico ----
-async function renderStockJornada(container) {
-  // Usar jornada activa; si no hay, buscar la última (abierta o cerrada)
-  let jornadaId = jornadaActiva?.id || null;
-  let jornadaFecha = jornadaActiva?.fecha || null;
-  let jornadaLabel = jornadaActiva ? jornadaActiva.fechaDisplay : null;
-  let jornadaCerrada = false;
-
-  if (!jornadaId) {
-    try {
-      const snap = await db.collection(COL_JORNADAS).orderBy('fechaCreacion','desc').limit(1).get();
-      if (!snap.empty) {
-        const jd = snap.docs[0]; const j = jd.data();
-        jornadaId = jd.id;
-        jornadaFecha = j.fecha || j.fechaCreacion?.split('T')[0] || new Date().toISOString().split('T')[0];
-        jornadaLabel = j.fechaDisplay || jornadaFecha;
-        jornadaCerrada = j.estado === 'cerrada';
-      }
-    } catch(e) {}
-  }
-  jornadaFecha = jornadaFecha || new Date().toISOString().split('T')[0];
-  const semanaId = obtenerIdSemana(jornadaFecha);
-
-  // Pedidos de la semana
-  const pedidosSnap = await db.collection(COL_STOCK_MOVS)
-    .where('semanaId','==',semanaId).where('tipo','==','pedido').get()
-    .catch(()=>({docs:[]}));
-  const pedidos = {};
-  pedidosSnap.docs.forEach(d=>{ const dat=d.data(); pedidos[dat.itemId]={qty:parseFloat(dat.qty)||0,costo:dat.costo||0}; });
-
-  // Stock final de la jornada anterior
-  const stockFinalAnterior = await cargarStockFinalAnterior(jornadaFecha);
-
-  // Stock final actual guardado para esta jornada
-  const stockFinalSnap = jornadaId
-    ? await db.collection(COL_STOCK_MOVS)
-        .where('jornadaId','==',jornadaId).where('tipo','==','final').get()
-        .catch(()=>({docs:[]}))
-    : {docs:[]};
-  const stockFinal = {};
-  stockFinalSnap.docs.forEach(d=>{ const dat=d.data(); stockFinal[dat.itemId]={qty:dat.qty,docId:d.id}; });
-
-  const items = itemsFiltrados();
-  const provGroups = agruparPorProveedor(items);
-
-  const jornadaIdFinal = jornadaId || 'SIN_JORNADA';
-  let html = `
-    <div class="stock-status-bar">
-      ${jornadaActiva
-        ? `<span><span class="stock-status-dot ok"></span>Jornada: <strong style="color:#EEE">${jornadaActiva.fechaDisplay}</strong></span>`
-        : jornadaLabel
-          ? `<span><span class="stock-status-dot warn"></span>Última jornada: <strong style="color:#EEE">${jornadaLabel}</strong>${jornadaCerrada?' <span style="font-size:10px;color:#555">(cerrada)</span>':''}</span>`
-          : `<span><span class="stock-status-dot warn"></span>Sin jornada — cálculo de hoy</span>`
-      }
-      <span style="color:#555">|</span>
-      <span>Stock inicial = final anterior + pedidos semana</span>
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-      <button class="btn-stock-guardar" onclick="guardarStockFinal('${jornadaIdFinal}')">💾 Guardar stock final</button>
-    </div>
-  `;
-
-  for (const [prov, provItems] of Object.entries(provGroups)) {
-    const color = PROVEEDORES_COLORES[prov] || '#888';
-    html += `
-      <div style="margin-bottom:16px">
-        <div class="stock-section-title">
-          <span style="color:${color}">● ${prov}</span>
-        </div>
-        <table class="stock-table">
-          <thead><tr>
-            <th>Producto</th>
-            <th class="stock-num" style="color:var(--celeste)">Inicial <span style="font-size:8px;opacity:.6">(editable)</span></th>
-            <th class="stock-num" style="color:var(--verde)">Final físico</th>
-            <th class="stock-num">Diferencia</th>
-            <th style="color:#888;font-size:9px">Costo/u</th>
-            <th style="width:30px"></th>
-          </tr></thead>
-          <tbody>
-    `;
-    provItems.forEach(item => {
-      const anterior = parseFloat(stockFinalAnterior[item.id]?.qty)||0;
-      const pedido   = parseFloat(pedidos[item.id]?.qty)||0;
-      const costo    = pedidos[item.id]?.costo||0;
-      // Si hay un ajuste manual guardado, usarlo como inicial; si no, calcularlo
-      const ajusteGuardado = stockFinal[item.id]?.stockInicialAjustado;
-      const inicialCalc  = anterior + pedido;
-      const inicialUsado = ajusteGuardado !== undefined ? ajusteGuardado : inicialCalc;
-      const finalFis = stockFinal[item.id]?.qty;
-      const diff = finalFis !== undefined ? (parseFloat(finalFis) - parseFloat(inicialUsado)) : null;
-
-      html += `<tr>
-        <td>
-          <div style="font-weight:600;color:#EEE">${item.nombre}</div>
-          <div style="font-size:10px;color:#555">${item.unidad} · <span style="color:${color};font-size:9px">${prov}</span></div>
-          <div style="font-size:9px;color:#444">Anterior: ${anterior} + Pedido: ${pedido} = <strong style="color:#7EC8E3">${inicialCalc}</strong>${ajusteGuardado!==undefined?' → ajustado':''}
-          </div>
+        <td class="stock-input-cell">
+          <input class="stock-cell-input" type="number" id="sc-inicial-${item.id}"
+            value="${g.stockInicial!==undefined?g.stockInicial:''}" placeholder="0"
+            min="0" step="0.5" inputmode="decimal"
+            style="border-color:#2E86C155;color:var(--celeste)">
         </td>
         <td class="stock-input-cell">
-          <input class="stock-cell-input" type="number" id="inicial-qty-${item.id}" value="${inicialUsado}" min="0" step="0.5" inputmode="decimal"
-            style="border-color:#2E86C155;color:var(--celeste);font-weight:700"
-            oninput="recalcularDiff('${item.id}')">
+          <input class="stock-cell-input" type="number" id="sc-pedidoqty-${item.id}"
+            value="${g.pedidoQty!==undefined?g.pedidoQty:''}" placeholder="0"
+            min="0" step="0.5" inputmode="decimal"
+            style="border-color:#E67E2255">
         </td>
-        <td class="stock-input-cell"><input class="stock-cell-input" type="number" id="final-qty-${item.id}" value="${finalFis!==undefined?finalFis:''}" placeholder="${inicialUsado}" min="0" step="0.5" inputmode="decimal" oninput="recalcularDiff('${item.id}')"></td>
-        <td class="stock-num ${diff!==null?(diff<0?'stock-diff neg':(diff>0?'stock-diff warn':'stock-diff ok')):'stock-diff ok'}" id="diff-${item.id}">
-          ${diff!==null?(diff>0?'+':'')+diff.toFixed(1):'—'}
+        <td class="stock-input-cell">
+          <input class="stock-cell-input" type="number" id="sc-pedidoprecio-${item.id}"
+            value="${g.pedidoPrecio!==undefined?g.pedidoPrecio:''}" placeholder="$0"
+            min="0" inputmode="numeric"
+            style="border-color:#F1C40F44;color:var(--amarillo)">
         </td>
-        <td class="stock-cost">${costo?'$'+Number(costo).toLocaleString('es-AR'):'—'}</td>
-        <td><button class="btn-stock-accion edit" onclick="abrirEditarItemStock('${item.id}')" title="Editar ítem">✏️</button></td>
+        <td class="stock-input-cell">
+          <input class="stock-cell-input" type="number" id="sc-final-${item.id}"
+            value="${g.qty!==undefined?g.qty:''}" placeholder="0"
+            min="0" step="0.5" inputmode="decimal"
+            style="border-color:#27AE6055;color:var(--verde);font-weight:700">
+        </td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -1771,152 +1679,105 @@ async function renderStockJornada(container) {
   container.innerHTML = html;
 }
 
-// ---- MODO HISTORIAL ----
-// Tabla transpuesta: filas = productos, columnas = fechas (más reciente primero)
-async function renderStockHistorial(container) {
-  container.innerHTML = '<div style="color:#555;text-align:center;padding:24px;font-size:12px">Cargando historial…</div>';
+function stockCambiarFecha(fecha) {
+  STOCK.fechaActual = fecha;
+  renderStockContenido();
+}
 
-  // Traer todos los movimientos tipo 'final', sin orderBy para evitar índice compuesto
+async function guardarStockCarga() {
+  const fechaSel = STOCK.fechaActual;
+  const items = itemsFiltrados();
+  const batch = db.batch();
+  let count = 0;
+
+  items.forEach(item => {
+    const elInicial = document.getElementById('sc-inicial-'+item.id);
+    const elPedidoQty = document.getElementById('sc-pedidoqty-'+item.id);
+    const elPedidoPrecio = document.getElementById('sc-pedidoprecio-'+item.id);
+    const elFinal = document.getElementById('sc-final-'+item.id);
+    if (!elFinal) return;
+
+    const stockInicial = elInicial?.value !== '' ? parseFloat(elInicial.value)||0 : null;
+    const pedidoQty = elPedidoQty?.value !== '' ? parseFloat(elPedidoQty.value)||0 : null;
+    const pedidoPrecio = elPedidoPrecio?.value !== '' ? parseFloat(elPedidoPrecio.value)||0 : null;
+    const qty = elFinal?.value !== '' ? parseFloat(elFinal.value)||0 : null;
+
+    // Guardar si hay al menos un campo cargado
+    if (stockInicial === null && pedidoQty === null && pedidoPrecio === null && qty === null) return;
+
+    const docId = 'final_' + fechaSel + '_' + item.id;
+    const ref = db.collection(COL_STOCK_MOVS).doc(docId);
+    const data = {
+      id: docId, tipo: 'final',
+      fechaISO: fechaSel,
+      itemId: item.id,
+      proveedor: item.proveedor,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      usuario: usuarioActual?.nombre||'—'
+    };
+    if (stockInicial !== null) data.stockInicial = stockInicial;
+    if (pedidoQty !== null) data.pedidoQty = pedidoQty;
+    if (pedidoPrecio !== null) data.pedidoPrecio = pedidoPrecio;
+    if (qty !== null) data.qty = qty;
+
+    batch.set(ref, data, {merge:true});
+    count++;
+  });
+
+  try {
+    await batch.commit();
+    toast(`✅ Stock guardado (${count} ítems) para ${fechaSel}`, 'verde');
+  } catch(e) {
+    toast('Error guardando: '+e.message, 'rojo');
+  }
+}
+
+function limpiarStockCarga() {
+  const items = itemsFiltrados();
+  items.forEach(item => {
+    ['sc-inicial-','sc-pedidoqty-','sc-pedidoprecio-','sc-final-'].forEach(pfx => {
+      const el = document.getElementById(pfx+item.id);
+      if (el) el.value = '';
+    });
+  });
+  toast('Celdas limpiadas', 'naranja');
+}
+
+async function traerStockAnterior() {
+  const fechaSel = STOCK.fechaActual;
+  // Buscar todos los movimientos tipo 'final' sin filtro de fecha para hallar el más reciente antes de fechaSel
   const snap = await db.collection(COL_STOCK_MOVS)
     .where('tipo','==','final')
     .get()
     .catch(()=>({docs:[]}));
 
-  if (snap.docs.length === 0) {
-    container.innerHTML = '<div style="color:#444;text-align:center;padding:32px;font-size:13px">Sin historial de stock final guardado todavía.<br><span style="font-size:11px;color:#333">El stock se guarda automáticamente al cerrar la jornada.</span></div>';
-    return;
-  }
+  // Agrupar por fecha y encontrar la fecha más reciente antes de fechaSel
+  const fechas = new Set();
+  snap.docs.forEach(d => {
+    const f = d.data().fechaISO;
+    if (f && f < fechaSel) fechas.add(f);
+  });
 
-  // Agrupar por fecha (fechaISO), tomar el registro más reciente por item+fecha
-  const byFecha = {}; // { fechaISO: { itemId: {qty, stockInicial} } }
+  if (!fechas.size) { toast('Sin stock anterior para traer', 'naranja'); return; }
+
+  const fechaAnterior = [...fechas].sort().reverse()[0];
+  const stockAnterior = {};
   snap.docs.forEach(d => {
     const dat = d.data();
-    const f = dat.fechaISO || 'sin-fecha';
-    if (!byFecha[f]) byFecha[f] = {};
-    // Si ya existe uno para este item en esta fecha, conservar el más reciente
-    const existing = byFecha[f][dat.itemId];
-    const ts = dat.timestamp?.seconds || 0;
-    const existTs = existing?._ts || 0;
-    if (!existing || ts > existTs) {
-      byFecha[f][dat.itemId] = { qty: dat.qty, stockInicial: dat.stockInicial, _ts: ts };
+    if (dat.fechaISO === fechaAnterior) {
+      stockAnterior[dat.itemId] = dat.qty;
     }
   });
 
-  // Ordenar fechas desc
-  const fechas = Object.keys(byFecha).filter(f=>f!=='sin-fecha').sort((a,b)=>b.localeCompare(a));
-  if (byFecha['sin-fecha']) fechas.push('sin-fecha');
-
-  // Obtener ítems a mostrar (filtrado por proveedor si aplica)
-  const itemsMostrar = STOCK.items.filter(i => {
-    if (!i.activo) return false;
-    if (STOCK.proveedorFiltro !== 'TODOS' && i.proveedor !== STOCK.proveedorFiltro) return false;
-    // Solo mostrar ítems que tengan al menos un dato en el historial
-    return fechas.some(f => byFecha[f][i.id] !== undefined);
-  });
-
-  if (!itemsMostrar.length) {
-    container.innerHTML = '<div style="color:#444;text-align:center;padding:24px;font-size:12px">Sin datos para este proveedor</div>';
-    return;
-  }
-
-  // Limitar a últimas 8 fechas para no saturar la tabla en móvil
-  const fechasMostrar = fechas.slice(0, 8);
-
-  // Cabecera de fechas
-  const labels = {GARU:'🟠 GARU',CASSINA:'🔵 CASSINA',ROCA:'🔴 ROCA',AGUA_SC:'💧 AGUA SC',VELOCE:'🟡 VELOCE',PROLIDE:'🟢 PROLIDE',GANCIA:'🍊 GANCIA',VARIOS:'📦 VARIOS'};
-
-  let html = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${280 + fechasMostrar.length * 90}px">
-    <thead>
-      <tr style="border-bottom:2px solid #333">
-        <th style="text-align:left;padding:8px 10px;color:#666;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;position:sticky;left:0;background:#1A1A1A;min-width:130px">Producto</th>`;
-
-  fechasMostrar.forEach(f => {
-    const d = f !== 'sin-fecha' ? new Date(f+'T12:00:00') : null;
-    const label = d ? d.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'}) : '—';
-    const labelShort = d ? d.toLocaleDateString('es-AR',{day:'numeric',month:'short'}) : '—';
-    html += `<th class="stock-num" style="padding:8px 8px;color:var(--celeste);font-weight:700;font-size:10px;min-width:80px"><div>${labelShort}</div><div style="color:#444;font-weight:400">${d?d.toLocaleDateString('es-AR',{weekday:'short'}):''}</div></th>`;
-  });
-  html += `</tr></thead><tbody>`;
-
-  // Agrupar por proveedor
-  const gruposProv = {};
-  itemsMostrar.forEach(i => {
-    if (!gruposProv[i.proveedor]) gruposProv[i.proveedor] = [];
-    gruposProv[i.proveedor].push(i);
-  });
-  const ordenProv = ['GARU','CASSINA','ROCA','AGUA_SC','VELOCE','PROLIDE','GANCIA','VARIOS'];
-  const provsEnUso = STOCK.proveedorFiltro === 'TODOS'
-    ? ordenProv.filter(p => gruposProv[p])
-    : [STOCK.proveedorFiltro].filter(p => gruposProv[p]);
-
-  provsEnUso.forEach(prov => {
-    if (STOCK.proveedorFiltro === 'TODOS') {
-      const ncols = fechasMostrar.length + 1;
-      html += `<tr><td colspan="${ncols}" style="padding:8px 10px 3px;font-size:10px;font-weight:700;color:var(--naranja);text-transform:uppercase;letter-spacing:1px;background:#111;position:sticky;left:0">${labels[prov]||prov}</td></tr>`;
+  // Rellenar columna "Inicial" con el final de la fecha anterior
+  let count = 0;
+  STOCK.items.filter(i=>i.activo).forEach(item => {
+    if (stockAnterior[item.id] !== undefined) {
+      const el = document.getElementById('sc-inicial-'+item.id);
+      if (el) { el.value = stockAnterior[item.id]; count++; }
     }
-    gruposProv[prov].forEach(item => {
-      html += `<tr style="border-bottom:1px solid #1E1E1E">
-        <td style="padding:7px 10px;color:#DDD;font-weight:500;position:sticky;left:0;background:#1A1A1A">
-          ${item.nombre}<div style="font-size:9px;color:#444">${item.unidad||''}</div>
-        </td>`;
-      fechasMostrar.forEach(f => {
-        const rec = byFecha[f][item.id];
-        if (!rec) {
-          html += `<td class="stock-num" style="padding:7px 8px;color:#2A2A2A">—</td>`;
-        } else {
-          const qty = parseFloat(rec.qty)||0;
-          const ini = parseFloat(rec.stockInicial)||0;
-          const diff = qty - ini;
-          const diffColor = diff < 0 ? 'var(--rojo)' : diff > 0 ? 'var(--amarillo)' : 'var(--verde)';
-          html += `<td class="stock-num" style="padding:7px 8px">
-            <div style="color:#EEE;font-weight:700">${qty}</div>
-            <div style="font-size:9px;color:${diffColor}">${diff>0?'+':''}${diff}</div>
-          </td>`;
-        }
-      });
-      html += `</tr>`;
-    });
   });
-
-  html += `</tbody></table></div>`;
-  if (fechas.length > 8) {
-    html += `<div style="text-align:center;font-size:10px;color:#444;padding:8px">Mostrando las últimas 8 fechas de ${fechas.length} registradas</div>`;
-  }
-  container.innerHTML = html;
-}
-
-// ---- MARGEN Y RECÁLCULO EN TIEMPO REAL ----
-function calcularMargenTexto(costo, precio) {
-  const c = parseFloat(costo)||0;
-  const p = parseFloat(precio)||0;
-  if (!c || !p) return '<span style="color:#444">—</span>';
-  const margen = ((p - c) / p * 100).toFixed(1);
-  const color = margen >= 50 ? 'var(--verde)' : margen >= 30 ? 'var(--amarillo)' : 'var(--rojo)';
-  return `<span style="color:${color}">${margen}%</span>`;
-}
-
-function calcularMargenFila(itemId) {
-  const costoEl = document.getElementById('pedido-costo-'+itemId);
-  const precioEl = document.getElementById('pedido-precio-'+itemId);
-  const margenEl = document.getElementById('margen-'+itemId);
-  if (!margenEl) return;
-  margenEl.innerHTML = calcularMargenTexto(costoEl?.value, precioEl?.value);
-}
-
-function recalcularDiff(itemId) {
-  const inicialEl = document.getElementById('inicial-qty-'+itemId);
-  const finalEl = document.getElementById('final-qty-'+itemId);
-  const diffEl = document.getElementById('diff-'+itemId);
-  if (!diffEl || !inicialEl || !finalEl || finalEl.value==='') {
-    if (diffEl) diffEl.textContent = '—';
-    return;
-  }
-  const ini = parseFloat(inicialEl.value)||0;
-  const fin = parseFloat(finalEl.value)||0;
-  const diff = fin - ini;
-  diffEl.textContent = (diff>0?'+':'')+diff.toFixed(1);
-  diffEl.className = 'stock-num stock-diff ' + (diff < 0 ? 'neg' : diff > 0 ? 'warn' : 'ok');
+  toast(`✅ Stock final de ${fechaAnterior} cargado como inicial (${count} ítems)`, 'verde');
 }
 
 // ---- HELPERS ----
@@ -1932,182 +1793,6 @@ function agruparPorProveedor(items) {
   orden.forEach(p => { if (grupos[p]) result[p]=grupos[p]; });
   Object.keys(grupos).forEach(p => { if (!result[p]) result[p]=grupos[p]; });
   return result;
-}
-
-function obtenerIdSemana(fechaISO) {
-  const d = fechaISO ? new Date(fechaISO+'T12:00:00') : new Date();
-  const day = d.getDay();
-  // Semana comienza el domingo
-  const diffLunes = (day === 0) ? -6 : 1 - day;
-  const lunes = new Date(d); lunes.setDate(d.getDate() + diffLunes);
-  return lunes.toISOString().split('T')[0]; // YYYY-MM-DD del lunes
-}
-
-async function cargarStockFinalAnterior(fechaISO) {
-  // Busca la última jornada cerrada antes de la fecha dada
-  try {
-    const snap = await db.collection(COL_JORNADAS)
-      .where('estado','==','cerrada')
-      .orderBy('fecha','desc')
-      .limit(5).get();
-    for (const doc of snap.docs) {
-      const j = doc.data();
-      if (j.fecha < (fechaISO || new Date().toISOString().split('T')[0])) {
-        // Buscar stock final de esa jornada
-        const finalSnap = await db.collection(COL_STOCK_MOVS)
-          .where('jornadaId','==',doc.id).where('tipo','==','final').get();
-        if (!finalSnap.empty) {
-          const result = {};
-          finalSnap.docs.forEach(d=>{const dat=d.data(); result[dat.itemId]={qty:dat.qty};});
-          return result;
-        }
-      }
-    }
-  } catch(e) {}
-  return {};
-}
-
-// ---- GUARDAR PEDIDOS ----
-async function guardarTodosLosPedidos(semanaId) {
-  const items = itemsFiltrados();
-  if (!items.length) { toast('Sin ítems para guardar','naranja'); return; }
-  const batch = db.batch();
-  let count = 0;
-  items.forEach(item => {
-    const qtyEl = document.getElementById('pedido-qty-'+item.id);
-    const costoEl = document.getElementById('pedido-costo-'+item.id);
-    const notaEl = document.getElementById('pedido-nota-'+item.id);
-    const precioEl = document.getElementById('pedido-precio-'+item.id);
-    if (!qtyEl) return;
-    const qty = parseFloat(qtyEl.value)||0;
-    if (qty === 0 && !costoEl?.value) return;
-    const docId = 'pedido_'+semanaId+'_'+item.id;
-    const ref = db.collection(COL_STOCK_MOVS).doc(docId);
-    batch.set(ref, {
-      id: docId, tipo: 'pedido', semanaId, itemId: item.id,
-      qty, costo: parseFloat(costoEl?.value)||0, nota: notaEl?.value||'',
-      precioVenta: parseFloat(precioEl?.value)||0,
-      proveedor: item.proveedor, fechaISO: new Date().toISOString().split('T')[0],
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      usuario: usuarioActual?.nombre||'—'
-    }, {merge:true});
-    count++;
-  });
-  try {
-    await batch.commit();
-    toast(`✅ ${count} pedidos guardados para semana ${semanaId}`, 'verde');
-  } catch(e) {
-    toast('Error guardando pedidos: '+e.message,'rojo');
-  }
-}
-
-// ---- GUARDAR STOCK FINAL ----
-async function guardarStockFinal(jornadaId) {
-  // Si el jornadaId recibido es 'SIN_JORNADA' o null, buscar la última jornada real
-  if (!jornadaId || jornadaId === 'SIN_JORNADA') {
-    try {
-      const snap = await db.collection(COL_JORNADAS).orderBy('fechaCreacion','desc').limit(1).get();
-      if (!snap.empty) jornadaId = snap.docs[0].id;
-    } catch(e) {}
-    if (!jornadaId) jornadaId = 'SIN_JORNADA';
-  }
-  const items = itemsFiltrados();
-  const fechaISO = jornadaActiva?.fecha || new Date().toISOString().split('T')[0];
-  const semanaId = obtenerIdSemana(fechaISO);
-
-  // Cargar pedidos y anterior para calcular inicial
-  const pedidosSnap = await db.collection(COL_STOCK_MOVS)
-    .where('semanaId','==',semanaId).where('tipo','==','pedido').get()
-    .catch(()=>({docs:[]}));
-  const pedidos = {};
-  pedidosSnap.docs.forEach(d=>{const dat=d.data();pedidos[dat.itemId]={qty:parseFloat(dat.qty)||0};});
-
-  const stockFinalAnterior = await cargarStockFinalAnterior(fechaISO);
-
-  const batch = db.batch();
-  let count = 0;
-  items.forEach(item => {
-    const elFinal = document.getElementById('final-qty-'+item.id);
-    const elInicial = document.getElementById('inicial-qty-'+item.id);
-    if (!elFinal || elFinal.value==='') return;
-    const qty = parseFloat(elFinal.value)||0;
-    const anterior = parseFloat(stockFinalAnterior[item.id]?.qty)||0;
-    const pedido   = parseFloat(pedidos[item.id]?.qty)||0;
-    const stockInicialCalc = anterior + pedido;
-    // Si el usuario editó el inicial manualmente, guardar el ajuste
-    const stockInicialAjustado = elInicial ? parseFloat(elInicial.value) : stockInicialCalc;
-    const ajustado = stockInicialAjustado !== stockInicialCalc;
-    const docId = 'final_'+jornadaId+'_'+item.id;
-    const ref = db.collection(COL_STOCK_MOVS).doc(docId);
-    batch.set(ref, {
-      id: docId, tipo: 'final', jornadaId, itemId: item.id,
-      qty, stockInicial: stockInicialAjustado,
-      stockInicialCalculado: stockInicialCalc,
-      stockInicialAjustado: ajustado ? stockInicialAjustado : null,
-      proveedor: item.proveedor,
-      fechaISO, semanaId,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      usuario: usuarioActual?.nombre||'—'
-    }, {merge:true});
-    count++;
-  });
-
-  try {
-    await batch.commit();
-    toast(`✅ Stock final guardado (${count} ítems)`, 'verde');
-  } catch(e) {
-    toast('Error: '+e.message,'rojo');
-  }
-}
-
-// ---- AUTO-GUARDAR STOCK AL CERRAR JORNADA ----
-// Igual que guardarStockFinal pero sin depender de los inputs del DOM:
-// toma los valores que ya están guardados en Firestore para esa jornada y los confirma,
-// o bien guarda los inputs si la pantalla de stock está abierta.
-async function guardarStockFinalSilencioso(jornadaId) {
-  const fechaISO = jornadaActiva?.fecha || new Date().toISOString().split('T')[0];
-  const semanaId = obtenerIdSemana(fechaISO);
-
-  // ¿Hay inputs de stock final en el DOM? (usuario tenía la pestaña abierta)
-  const hayInputs = !!document.getElementById('final-qty-' + (STOCK.items[0]?.id||'x'));
-
-  if (hayInputs) {
-    // Guardar todo lo que haya en los inputs (misma lógica que guardarStockFinal)
-    const pedidosSnap = await db.collection(COL_STOCK_MOVS)
-      .where('semanaId','==',semanaId).where('tipo','==','pedido').get()
-      .catch(()=>({docs:[]}));
-    const pedidos = {};
-    pedidosSnap.docs.forEach(d=>{const dat=d.data();pedidos[dat.itemId]={qty:parseFloat(dat.qty)||0};});
-    const stockFinalAnterior = await cargarStockFinalAnterior(fechaISO);
-
-    const batch = db.batch();
-    let count = 0;
-    STOCK.items.filter(i=>i.activo).forEach(item => {
-      const elFinal = document.getElementById('final-qty-'+item.id);
-      const elInicial = document.getElementById('inicial-qty-'+item.id);
-      if (!elFinal || elFinal.value==='') return;
-      const qty = parseFloat(elFinal.value)||0;
-      const anterior = parseFloat(stockFinalAnterior[item.id]?.qty)||0;
-      const pedido   = parseFloat(pedidos[item.id]?.qty)||0;
-      const stockInicialCalc = anterior + pedido;
-      const stockInicialAjustado = elInicial ? parseFloat(elInicial.value) : stockInicialCalc;
-      const ajustado = stockInicialAjustado !== stockInicialCalc;
-      const docId = 'final_'+jornadaId+'_'+item.id;
-      batch.set(db.collection(COL_STOCK_MOVS).doc(docId), {
-        id:docId, tipo:'final', jornadaId, itemId:item.id,
-        qty, stockInicial:stockInicialAjustado,
-        stockInicialCalculado:stockInicialCalc,
-        stockInicialAjustado: ajustado ? stockInicialAjustado : null,
-        proveedor:item.proveedor, fechaISO, semanaId,
-        timestamp:firebase.firestore.FieldValue.serverTimestamp(),
-        usuario:usuarioActual?.nombre||'—'
-      }, {merge:true});
-      count++;
-    });
-    if (count > 0) await batch.commit();
-  }
-  // Si no había inputs (pantalla no estaba abierta), no hacemos nada:
-  // los registros que ya guardó la usuaria durante la jornada ya están en Firestore.
 }
 
 // ---- GESTIÓN DE ÍTEMS (editar, eliminar, listar por proveedor) ----
