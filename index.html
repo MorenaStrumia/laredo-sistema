@@ -1795,6 +1795,117 @@ function agruparPorProveedor(items) {
   return result;
 }
 
+
+// ---- MODO HISTORIAL ----
+// Tabla transpuesta: filas = productos, columnas = fechas (más reciente primero)
+async function renderStockHistorial(container) {
+  container.innerHTML = '<div style="color:#555;text-align:center;padding:24px;font-size:12px">Cargando historial…</div>';
+
+  // Traer todos los movimientos tipo 'final', sin orderBy para evitar índice compuesto
+  const snap = await db.collection(COL_STOCK_MOVS)
+    .where('tipo','==','final')
+    .get()
+    .catch(()=>({docs:[]}));
+
+  if (snap.docs.length === 0) {
+    container.innerHTML = '<div style="color:#444;text-align:center;padding:32px;font-size:13px">Sin historial de stock final guardado todavía.<br><span style="font-size:11px;color:#333">Guardá un stock desde la pestaña Carga para que aparezca aquí.</span></div>';
+    return;
+  }
+
+  // Agrupar por fecha (fechaISO), tomar el registro más reciente por item+fecha
+  const byFecha = {}; // { fechaISO: { itemId: {qty, stockInicial} } }
+  snap.docs.forEach(d => {
+    const dat = d.data();
+    const f = dat.fechaISO || 'sin-fecha';
+    if (!byFecha[f]) byFecha[f] = {};
+    const existing = byFecha[f][dat.itemId];
+    const ts = dat.timestamp?.seconds || 0;
+    const existTs = existing?._ts || 0;
+    if (!existing || ts > existTs) {
+      byFecha[f][dat.itemId] = { qty: dat.qty, stockInicial: dat.stockInicial, _ts: ts };
+    }
+  });
+
+  // Ordenar fechas desc
+  const fechas = Object.keys(byFecha).filter(f=>f!=='sin-fecha').sort((a,b)=>b.localeCompare(a));
+  if (byFecha['sin-fecha']) fechas.push('sin-fecha');
+
+  // Obtener ítems a mostrar (filtrado por proveedor si aplica)
+  const itemsMostrar = STOCK.items.filter(i => {
+    if (!i.activo) return false;
+    if (STOCK.proveedorFiltro !== 'TODOS' && i.proveedor !== STOCK.proveedorFiltro) return false;
+    return fechas.some(f => byFecha[f][i.id] !== undefined);
+  });
+
+  if (!itemsMostrar.length) {
+    container.innerHTML = '<div style="color:#444;text-align:center;padding:24px;font-size:12px">Sin datos para este proveedor en el historial</div>';
+    return;
+  }
+
+  // Limitar a últimas 8 fechas
+  const fechasMostrar = fechas.slice(0, 8);
+  const labels = {GARU:'🟠 GARU',CASSINA:'🔵 CASSINA',ROCA:'🔴 ROCA',AGUA_SC:'💧 AGUA SC',VELOCE:'🟡 VELOCE',PROLIDE:'🟢 PROLIDE',GANCIA:'🍊 GANCIA',VARIOS:'📦 VARIOS'};
+
+  let html = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${280 + fechasMostrar.length * 90}px">
+    <thead>
+      <tr style="border-bottom:2px solid #333">
+        <th style="text-align:left;padding:8px 10px;color:#666;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;position:sticky;left:0;background:#1A1A1A;min-width:130px">Producto</th>`;
+
+  fechasMostrar.forEach(f => {
+    const d = f !== 'sin-fecha' ? new Date(f+'T12:00:00') : null;
+    const labelShort = d ? d.toLocaleDateString('es-AR',{day:'numeric',month:'short'}) : '—';
+    html += `<th class="stock-num" style="padding:8px 8px;color:var(--celeste);font-weight:700;font-size:10px;min-width:80px"><div>${labelShort}</div><div style="color:#444;font-weight:400">${d?d.toLocaleDateString('es-AR',{weekday:'short'}):''}</div></th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  // Agrupar por proveedor
+  const gruposProv = {};
+  itemsMostrar.forEach(i => {
+    if (!gruposProv[i.proveedor]) gruposProv[i.proveedor] = [];
+    gruposProv[i.proveedor].push(i);
+  });
+  const ordenProv = ['GARU','CASSINA','ROCA','AGUA_SC','VELOCE','PROLIDE','GANCIA','VARIOS'];
+  const provsEnUso = STOCK.proveedorFiltro === 'TODOS'
+    ? ordenProv.filter(p => gruposProv[p])
+    : [STOCK.proveedorFiltro].filter(p => gruposProv[p]);
+
+  provsEnUso.forEach(prov => {
+    if (STOCK.proveedorFiltro === 'TODOS') {
+      const ncols = fechasMostrar.length + 1;
+      html += `<tr><td colspan="${ncols}" style="padding:8px 10px 3px;font-size:10px;font-weight:700;color:var(--naranja);text-transform:uppercase;letter-spacing:1px;background:#111;position:sticky;left:0">${labels[prov]||prov}</td></tr>`;
+    }
+    gruposProv[prov].forEach(item => {
+      html += `<tr style="border-bottom:1px solid #1E1E1E">
+        <td style="padding:7px 10px;color:#DDD;font-weight:500;position:sticky;left:0;background:#1A1A1A">
+          ${item.nombre}<div style="font-size:9px;color:#444">${item.unidad||''}</div>
+        </td>`;
+      fechasMostrar.forEach(f => {
+        const rec = byFecha[f][item.id];
+        if (!rec) {
+          html += `<td class="stock-num" style="padding:7px 8px;color:#2A2A2A">—</td>`;
+        } else {
+          const qty = parseFloat(rec.qty)||0;
+          const ini = parseFloat(rec.stockInicial)||0;
+          const diff = qty - ini;
+          const diffColor = diff < 0 ? 'var(--rojo)' : diff > 0 ? 'var(--amarillo)' : 'var(--verde)';
+          html += `<td class="stock-num" style="padding:7px 8px">
+            <div style="color:#EEE;font-weight:700">${qty}</div>
+            <div style="font-size:9px;color:${diffColor}">${diff>0?'+':''}${diff}</div>
+          </td>`;
+        }
+      });
+      html += `</tr>`;
+    });
+  });
+
+  html += `</tbody></table></div>`;
+  if (fechas.length > 8) {
+    html += `<div style="text-align:center;font-size:10px;color:#444;padding:8px">Mostrando las últimas 8 fechas de ${fechas.length} registradas</div>`;
+  }
+  container.innerHTML = html;
+}
+
 // ---- GESTIÓN DE ÍTEMS (editar, eliminar, listar por proveedor) ----
 function abrirGestionStock(prov) {
   const titulo = document.getElementById('gestion-stock-titulo');
