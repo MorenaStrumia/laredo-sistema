@@ -1798,10 +1798,10 @@ function agruparPorProveedor(items) {
 
 // ---- MODO HISTORIAL ----
 // Tabla transpuesta: filas = productos, columnas = fechas (más reciente primero)
+// Permite editar celdas (clic → input → Enter/blur guarda) y eliminar fechas completas
 async function renderStockHistorial(container) {
   container.innerHTML = '<div style="color:#555;text-align:center;padding:24px;font-size:12px">Cargando historial…</div>';
 
-  // Traer todos los movimientos tipo 'final', sin orderBy para evitar índice compuesto
   const snap = await db.collection(COL_STOCK_MOVS)
     .where('tipo','==','final')
     .get()
@@ -1812,25 +1812,25 @@ async function renderStockHistorial(container) {
     return;
   }
 
-  // Agrupar por fecha (fechaISO), tomar el registro más reciente por item+fecha
-  const byFecha = {}; // { fechaISO: { itemId: {qty, stockInicial} } }
+  // byFecha: { fechaISO: { itemId: { qty, stockInicial, docId, _ts } } }
+  // docIds: { fechaISO: [docId, ...] }  — para eliminar fecha completa
+  const byFecha = {};
+  const docIdsPorFecha = {};
   snap.docs.forEach(d => {
     const dat = d.data();
     const f = dat.fechaISO || 'sin-fecha';
-    if (!byFecha[f]) byFecha[f] = {};
+    if (!byFecha[f]) { byFecha[f] = {}; docIdsPorFecha[f] = []; }
+    docIdsPorFecha[f].push(d.id);
     const existing = byFecha[f][dat.itemId];
     const ts = dat.timestamp?.seconds || 0;
-    const existTs = existing?._ts || 0;
-    if (!existing || ts > existTs) {
-      byFecha[f][dat.itemId] = { qty: dat.qty, stockInicial: dat.stockInicial, _ts: ts };
+    if (!existing || ts > (existing._ts||0)) {
+      byFecha[f][dat.itemId] = { qty: dat.qty, stockInicial: dat.stockInicial, docId: d.id, _ts: ts };
     }
   });
 
-  // Ordenar fechas desc
   const fechas = Object.keys(byFecha).filter(f=>f!=='sin-fecha').sort((a,b)=>b.localeCompare(a));
   if (byFecha['sin-fecha']) fechas.push('sin-fecha');
 
-  // Obtener ítems a mostrar (filtrado por proveedor si aplica)
   const itemsMostrar = STOCK.items.filter(i => {
     if (!i.activo) return false;
     if (STOCK.proveedorFiltro !== 'TODOS' && i.proveedor !== STOCK.proveedorFiltro) return false;
@@ -1842,12 +1842,14 @@ async function renderStockHistorial(container) {
     return;
   }
 
-  // Limitar a últimas 8 fechas
   const fechasMostrar = fechas.slice(0, 8);
   const labels = {GARU:'🟠 GARU',CASSINA:'🔵 CASSINA',ROCA:'🔴 ROCA',AGUA_SC:'💧 AGUA SC',VELOCE:'🟡 VELOCE',PROLIDE:'🟢 PROLIDE',GANCIA:'🍊 GANCIA',VARIOS:'📦 VARIOS'};
 
+  // Guardar docIdsPorFecha en variable global temporal para que la use historialEliminarFecha
+  window._historialDocIds = docIdsPorFecha;
+
   let html = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${280 + fechasMostrar.length * 90}px">
+  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${280 + fechasMostrar.length * 100}px">
     <thead>
       <tr style="border-bottom:2px solid #333">
         <th style="text-align:left;padding:8px 10px;color:#666;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;position:sticky;left:0;background:#1A1A1A;min-width:130px">Producto</th>`;
@@ -1855,11 +1857,17 @@ async function renderStockHistorial(container) {
   fechasMostrar.forEach(f => {
     const d = f !== 'sin-fecha' ? new Date(f+'T12:00:00') : null;
     const labelShort = d ? d.toLocaleDateString('es-AR',{day:'numeric',month:'short'}) : '—';
-    html += `<th class="stock-num" style="padding:8px 8px;color:var(--celeste);font-weight:700;font-size:10px;min-width:80px"><div>${labelShort}</div><div style="color:#444;font-weight:400">${d?d.toLocaleDateString('es-AR',{weekday:'short'}):''}</div></th>`;
+    const diasem = d ? d.toLocaleDateString('es-AR',{weekday:'short'}) : '';
+    html += `<th class="stock-num" style="padding:6px 6px 4px;color:var(--celeste);font-weight:700;font-size:10px;min-width:90px">
+      <div>${labelShort}</div>
+      <div style="color:#444;font-weight:400;font-size:9px">${diasem}</div>
+      <button onclick="historialEliminarFecha('${f}')"
+        style="margin-top:4px;background:#2a0a0a;border:1px solid #5a1a1a;color:#E74C3C;border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer"
+        title="Eliminar todos los registros de esta fecha">🗑️ Eliminar</button>
+    </th>`;
   });
   html += `</tr></thead><tbody>`;
 
-  // Agrupar por proveedor
   const gruposProv = {};
   itemsMostrar.forEach(i => {
     if (!gruposProv[i.proveedor]) gruposProv[i.proveedor] = [];
@@ -1883,15 +1891,17 @@ async function renderStockHistorial(container) {
       fechasMostrar.forEach(f => {
         const rec = byFecha[f][item.id];
         if (!rec) {
-          html += `<td class="stock-num" style="padding:7px 8px;color:#2A2A2A">—</td>`;
+          html += `<td class="stock-num" style="padding:7px 8px;color:#333;cursor:pointer" onclick="historialAgregarCelda(this,'${f}','${item.id}')">—</td>`;
         } else {
           const qty = parseFloat(rec.qty)||0;
           const ini = parseFloat(rec.stockInicial)||0;
           const diff = qty - ini;
           const diffColor = diff < 0 ? 'var(--rojo)' : diff > 0 ? 'var(--amarillo)' : 'var(--verde)';
-          html += `<td class="stock-num" style="padding:7px 8px">
+          html += `<td class="stock-num" style="padding:7px 8px;cursor:pointer"
+            onclick="historialEditarCelda(this,'${f}','${item.id}',${qty},${ini})"
+            title="Clic para editar">
             <div style="color:#EEE;font-weight:700">${qty}</div>
-            <div style="font-size:9px;color:${diffColor}">${diff>0?'+':''}${diff}</div>
+            <div style="font-size:9px;color:${diffColor}">${diff>0?'+':''}${diff.toFixed(1)}</div>
           </td>`;
         }
       });
@@ -1904,6 +1914,71 @@ async function renderStockHistorial(container) {
     html += `<div style="text-align:center;font-size:10px;color:#444;padding:8px">Mostrando las últimas 8 fechas de ${fechas.length} registradas</div>`;
   }
   container.innerHTML = html;
+}
+
+// Editar celda existente en historial
+function historialEditarCelda(td, fechaISO, itemId, qtyActual, iniActual) {
+  td.innerHTML = `
+    <input type="number" value="${qtyActual}" min="0" step="0.5" inputmode="decimal"
+      id="hedit-${fechaISO}-${itemId}"
+      style="width:58px;background:#111;border:1px solid var(--celeste);color:#EEE;padding:3px 5px;border-radius:4px;font-size:12px;text-align:center"
+      onkeydown="if(event.key==='Enter')historialGuardarCelda(this,'${fechaISO}','${itemId}',${iniActual});if(event.key==='Escape')renderStockContenido()">
+    <div style="font-size:9px;color:#555;margin-top:2px">Enter↵ · Esc</div>`;
+  const inp = document.getElementById(`hedit-${fechaISO}-${itemId}`);
+  if (inp) { inp.focus(); inp.select(); inp.onblur = () => historialGuardarCelda(inp, fechaISO, itemId, iniActual); }
+}
+
+// Agregar valor en celda vacía
+function historialAgregarCelda(td, fechaISO, itemId) {
+  const item = STOCK.items.find(i=>i.id===itemId);
+  td.innerHTML = `
+    <input type="number" value="" min="0" step="0.5" inputmode="decimal"
+      id="hedit-${fechaISO}-${itemId}"
+      style="width:58px;background:#111;border:1px solid var(--verde);color:#EEE;padding:3px 5px;border-radius:4px;font-size:12px;text-align:center"
+      placeholder="0"
+      onkeydown="if(event.key==='Enter')historialGuardarCelda(this,'${fechaISO}','${itemId}',0);if(event.key==='Escape')renderStockContenido()">
+    <div style="font-size:9px;color:#555;margin-top:2px">Enter↵ · Esc</div>`;
+  const inp = document.getElementById(`hedit-${fechaISO}-${itemId}`);
+  if (inp) { inp.focus(); inp.onblur = () => historialGuardarCelda(inp, fechaISO, itemId, 0); }
+}
+
+async function historialGuardarCelda(inp, fechaISO, itemId, iniActual) {
+  inp.onblur = null; // evitar doble llamada
+  const val = inp.value.trim();
+  if (val === '') { renderStockContenido(); return; }
+  const qty = parseFloat(val)||0;
+  const item = STOCK.items.find(i=>i.id===itemId);
+  const docId = 'final_' + fechaISO + '_' + itemId;
+  try {
+    await db.collection(COL_STOCK_MOVS).doc(docId).set({
+      id: docId, tipo: 'final', fechaISO, itemId,
+      qty,
+      stockInicial: iniActual,
+      proveedor: item?.proveedor || '—',
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      usuario: usuarioActual?.nombre||'—'
+    }, {merge:true});
+    toast(`✅ Guardado: ${item?.nombre||itemId} = ${qty}`, 'verde');
+  } catch(e) {
+    toast('Error: '+e.message, 'rojo');
+  }
+  await renderStockContenido();
+}
+
+async function historialEliminarFecha(fechaISO) {
+  const docIds = (window._historialDocIds || {})[fechaISO] || [];
+  if (!docIds.length) { toast('Sin docs para eliminar','naranja'); return; }
+  const d = fechaISO !== 'sin-fecha' ? new Date(fechaISO+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'}) : fechaISO;
+  if (!confirm(`¿Eliminar todos los registros de stock del ${d}?\nEsto no se puede deshacer.`)) return;
+  try {
+    const batch = db.batch();
+    docIds.forEach(id => batch.delete(db.collection(COL_STOCK_MOVS).doc(id)));
+    await batch.commit();
+    toast(`🗑️ Fecha ${d} eliminada del historial`, 'naranja');
+    await renderStockContenido();
+  } catch(e) {
+    toast('Error eliminando: '+e.message, 'rojo');
+  }
 }
 
 // ---- GESTIÓN DE ÍTEMS (editar, eliminar, listar por proveedor) ----
